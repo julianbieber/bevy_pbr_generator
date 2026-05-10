@@ -130,7 +130,7 @@ fn main() {
 
     for config in &textures {
         let path = args.output_dir.join(format!("{}.png", config.name));
-        generate_texture(&config, args.resolution, &path);
+        generate_texture(config, args.resolution, &path);
         println!("Generated: {}", path.display());
     }
 
