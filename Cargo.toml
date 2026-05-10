@@ -1,0 +1,21 @@
+[package]
+name = "bevy_pbr_builder"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "bevy_pbr_builder"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bevy_pbr_builder"
+path = "src/main.rs"
+
+[dependencies]
+bevy = "0.18"
+image = "0.25"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+
+[profile.dev]
+opt-level = 1
