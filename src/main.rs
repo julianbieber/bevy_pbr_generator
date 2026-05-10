@@ -5,9 +5,11 @@
 
 use clap::Parser;
 use glam::Vec2;
-use image::{ImageBuffer, Rgba, RgbaImage};
+use image::{ImageBuffer, Rgba};
 use std::fs;
 use std::path::PathBuf;
+
+use image::RgbaImage;
 
 mod noise;
 mod textures;
@@ -38,7 +40,12 @@ struct TextureConfig {
 }
 
 impl TextureConfig {
-    fn new(name: &'static str, generator: fn(Vec2) -> Vec2, is_srgb: bool, channel_map: fn(Vec2) -> [f32; 4]) -> Self {
+    fn new(
+        name: &'static str,
+        generator: fn(Vec2) -> Vec2,
+        is_srgb: bool,
+        channel_map: fn(Vec2) -> [f32; 4],
+    ) -> Self {
         Self {
             name,
             generator,
@@ -53,7 +60,8 @@ fn main() {
 
     // Create output directory if it doesn't exist
     if !args.output_dir.exists() {
-        fs::create_dir_all(&args.output_dir).expect("Failed to create output directory");
+        fs::create_dir_all(&args.output_dir)
+            .expect("Failed to create output directory");
     }
 
     // Define all textures with their configurations
@@ -115,7 +123,10 @@ fn main() {
         ),
     ];
 
-    println!("Generating {}x{} textures...", args.resolution, args.resolution);
+    println!(
+        "Generating {}x{} textures...",
+        args.resolution, args.resolution
+    );
 
     for config in &textures {
         let path = args.output_dir.join(format!("{}.png", config.name));
@@ -123,7 +134,10 @@ fn main() {
         println!("Generated: {}", path.display());
     }
 
-    println!("Done! Textures saved to: {}", args.output_dir.display());
+    println!(
+        "Done! Textures saved to: {}",
+        args.output_dir.display()
+    );
 }
 
 /// Generate a single texture and save it as a PNG.
@@ -163,5 +177,6 @@ fn generate_texture(config: &TextureConfig, resolution: u32, path: &PathBuf) {
     // Note: The `image` crate doesn't support ICC profiles, so we rely on:
     // - sRGB textures: saved as-is (PNG is sRGB by default)
     // - Linear textures: saved as-is (user must load with `is_srgb: false` in Bevy)
-    img.save(path).expect("Failed to save texture");
+    img.save(path)
+        .expect("Failed to save texture");
 }

@@ -45,7 +45,6 @@ pub fn value_noise(uv: Vec2, scale: f32) -> f32 {
 }
 
 #[allow(dead_code)]
-/// Smoothstep interpolation function.
 #[inline]
 fn smoothstep(t: f32) -> f32 {
     t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
@@ -109,7 +108,6 @@ pub fn perlin_noise(uv: Vec2, scale: f32) -> f32 {
 }
 
 #[allow(dead_code)]
-/// Permutation function for Perlin noise.
 fn p(x: i32, y: i32) -> u8 {
     let mut x = x as usize;
     let mut y = y as usize;
@@ -179,7 +177,6 @@ pub fn simplex_noise(uv: Vec2, scale: f32) -> f32 {
 }
 
 #[allow(dead_code)]
-/// Hash function for Simplex noise.
 fn hash(x: i32, y: i32) -> u8 {
     let mut h = x.wrapping_mul(32661).wrapping_add(y.wrapping_mul(65537));
     h = (h ^ (h >> 13)).wrapping_mul(69069);
@@ -188,7 +185,6 @@ fn hash(x: i32, y: i32) -> u8 {
 }
 
 #[allow(dead_code)]
-/// Gradient function for Simplex noise.
 fn grad(hash: u8) -> Vec2 {
     let h = hash & 15;
     let u = if h < 8 { 1.0 } else { -1.0 };
@@ -197,7 +193,6 @@ fn grad(hash: u8) -> Vec2 {
 }
 
 #[allow(dead_code)]
-/// Dot product helper.
 fn dot(g: Vec2, v: Vec2) -> f32 {
     g.x * v.x + g.y * v.y
 }
@@ -237,7 +232,14 @@ pub fn worley_noise(uv: Vec2, scale: f32, points: usize) -> f32 {
 #[allow(dead_code)]
 /// Fractional Brownian Motion (fBm) for multi-octave noise.
 #[inline]
-pub fn fbm(uv: Vec2, scale: f32, octaves: usize, lacunarity: f32, persistence: f32, noise_fn: fn(Vec2, f32) -> f32) -> f32 {
+pub fn fbm(
+    uv: Vec2,
+    scale: f32,
+    octaves: usize,
+    lacunarity: f32,
+    persistence: f32,
+    noise_fn: fn(Vec2, f32) -> f32,
+) -> f32 {
     let mut value = 0.0;
     let mut amplitude = 1.0;
     let mut frequency = scale;
