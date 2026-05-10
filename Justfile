@@ -37,7 +37,7 @@ clean:
     cargo clean
 
 # Generate documentation
- docs:
+docs:
     cargo doc --open
 
 # Install the binary locally
