@@ -1,0 +1,10 @@
+[package]
+name = "bevy_pbr_generator"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+image = { version = "0.24", default-features = false, features = ["png"] }
+glam = "0.24"
