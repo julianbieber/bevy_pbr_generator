@@ -11,7 +11,7 @@ build:
 
 # Run clippy linter
 clippy:
-    cargo clippy --all-targets --all-features -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # Run tests (if any)
 test:
