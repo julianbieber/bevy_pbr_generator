@@ -60,8 +60,7 @@ fn main() {
 
     // Create output directory if it doesn't exist
     if !args.output_dir.exists() {
-        fs::create_dir_all(&args.output_dir)
-            .expect("Failed to create output directory");
+        fs::create_dir_all(&args.output_dir).expect("Failed to create output directory");
     }
 
     // Define all textures with their configurations
@@ -94,7 +93,7 @@ fn main() {
         TextureConfig::new(
             "metallic_roughness_texture",
             textures::metallic_roughness_texture,
-            false, // Linear
+            false,                    // Linear
             |v| [0.0, v.x, v.y, 1.0], // R=0.0, G=roughness, B=metallic, A=1.0
         ),
         // Diffuse transmission: A = transmission, RGB = 1.0
@@ -102,7 +101,7 @@ fn main() {
         TextureConfig::new(
             "diffuse_transmission_texture",
             textures::diffuse_transmission_texture,
-            false, // Linear
+            false,                    // Linear
             |v| [1.0, 1.0, 1.0, v.x], // R=1.0, G=1.0, B=1.0, A=transmission
         ),
         // Specular transmission: R = transmission, GBA = 1.0
@@ -110,7 +109,7 @@ fn main() {
         TextureConfig::new(
             "specular_transmission_texture",
             textures::specular_transmission_texture,
-            false, // Linear
+            false,                    // Linear
             |v| [v.x, 1.0, 1.0, 1.0], // R=transmission, G=1.0, B=1.0, A=1.0
         ),
         // Thickness: G = thickness, RBA = 1.0
@@ -118,7 +117,7 @@ fn main() {
         TextureConfig::new(
             "thickness_texture",
             textures::thickness_texture,
-            false, // Linear
+            false,                    // Linear
             |v| [1.0, v.x, 1.0, 1.0], // R=1.0, G=thickness, B=1.0, A=1.0
         ),
     ];
@@ -134,10 +133,7 @@ fn main() {
         println!("Generated: {}", path.display());
     }
 
-    println!(
-        "Done! Textures saved to: {}",
-        args.output_dir.display()
-    );
+    println!("Done! Textures saved to: {}", args.output_dir.display());
 }
 
 /// Generate a single texture and save it as a PNG.
@@ -177,6 +173,5 @@ fn generate_texture(config: &TextureConfig, resolution: u32, path: &PathBuf) {
     // Note: The `image` crate doesn't support ICC profiles, so we rely on:
     // - sRGB textures: saved as-is (PNG is sRGB by default)
     // - Linear textures: saved as-is (user must load with `is_srgb: false` in Bevy)
-    img.save(path)
-        .expect("Failed to save texture");
+    img.save(path).expect("Failed to save texture");
 }
