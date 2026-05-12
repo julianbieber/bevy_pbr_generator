@@ -93,33 +93,86 @@ All noise functions are in `src/noise.rs`:
 
 ## Bevy Integration
 
-Load the generated textures in Bevy with the correct color space:
-
 ```rust
-use bevy::prelude::*;
-
-fn setup_textures(asset_server: Res<AssetServer>) {
-    // sRGB textures (base_color, emissive)
-    let base_color = asset_server.load("textures/base_color_texture.png");
-    let emissive = asset_server.load("textures/emissive_texture.png");
-    
-    // Linear textures - MUST set is_srgb = false
-    let metallic_roughness = asset_server.load_with_settings(
-        "textures/metallic_roughness_texture.png",
-        |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-    );
-    let diffuse_transmission = asset_server.load_with_settings(
-        "textures/diffuse_transmission_texture.png",
-        |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-    );
-    let specular_transmission = asset_server.load_with_settings(
-        "textures/specular_transmission_texture.png",
-        |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-    );
-    let thickness = asset_server.load_with_settings(
-        "textures/thickness_texture.png",
-        |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-    );
+StandardMaterial {
+    base_color_texture: Some(
+        asset_server.load("output/base_color.png"),
+    ),
+    emissive_texture: Some(
+        asset_server.load("output/emissive.png"),
+    ),
+    normal_map_texture: Some(
+        asset_server.load_with_settings(
+            "output/normal.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    metallic_roughness_texture: Some(
+        asset_server.load_with_settings(
+            "output/orm.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    occlusion_texture: Some(
+        asset_server.load_with_settings(
+            "output/orm.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    depth_map: Some(
+        asset_server.load_with_settings(
+            "output/depth.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    clearcoat_texture: Some(
+        asset_server.load_with_settings(
+            "output/clearcoat.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    clearcoat_normal_texture: Some(
+        asset_server.load_with_settings(
+            "output/clearcoat_normal.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    clearcoat_roughness_texture: Some(
+        asset_server.load_with_settings(
+            "output/clearcoat.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    anisotropy_texture: Some(
+        asset_server.load_with_settings(
+            "output/anisotropy.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    // transmission.png packs: R=specular_transmission, G=thickness, A=diffuse_transmission
+    diffuse_transmission_texture: Some(
+        asset_server.load_with_settings(
+            "output/transmission.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    specular_transmission_texture: Some(
+        asset_server.load_with_settings(
+            "output/transmission.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    thickness_texture: Some(
+        asset_server.load_with_settings(
+            "output/transmission.png",
+            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
+        ),
+    ),
+    specular_tint_texture: Some(
+        asset_server.load("output/specular.png"),
+    ),
+    flip_normal_map_y: true,
+    ..Default::default()
 }
 ```
 
