@@ -4,7 +4,7 @@
 //! Users can edit the texture functions in `textures.rs` to customize generation.
 
 use clap::Parser;
-use glam::Vec2;
+use glam::{Vec2, Vec3, Vec4};
 use image::{ImageBuffer, Rgba};
 use std::fs;
 use std::path::PathBuf;
@@ -27,31 +27,118 @@ struct Args {
     output_dir: PathBuf,
 }
 
+/// Texture value enum to support different return types from generators.
+#[derive(Debug, Clone, Copy)]
+enum TextureValue {
+    F32(f32),
+    Vec2(Vec2),
+    Vec3(Vec3),
+    Vec4(Vec4),
+}
+
 /// Texture configuration for Bevy PBR.
-#[derive(Debug, Clone)]
+/// Each generator returns its natural type (f32, Vec2, Vec3, Vec4).
+/// The pack_fn converts the generator's output to RGBA [f32; 4] based on Bevy's channel mappings.
+#[derive(Debug, Clone, Copy)]
 struct TextureConfig {
     name: &'static str,
-    generator: fn(Vec2) -> Vec2,
+    generator: fn(Vec2) -> TextureValue,
     #[allow(dead_code)]
     is_srgb: bool,
-    /// Channel mapping: (R, G, B, A) where each is derived from the Vec2 output.
-    /// For Vec2 output, we map x and y to specific channels.
-    channel_map: fn(Vec2) -> [f32; 4],
+    /// Pack function: converts the generator's TextureValue to RGBA [f32; 4]
+    /// based on Bevy's channel mappings for this specific texture.
+    pack_fn: fn(TextureValue) -> [f32; 4],
 }
 
 impl TextureConfig {
     fn new(
         name: &'static str,
-        generator: fn(Vec2) -> Vec2,
+        generator: fn(Vec2) -> TextureValue,
         is_srgb: bool,
-        channel_map: fn(Vec2) -> [f32; 4],
+        pack_fn: fn(TextureValue) -> [f32; 4],
     ) -> Self {
         Self {
             name,
             generator,
             is_srgb,
-            channel_map,
+            pack_fn,
         }
+    }
+}
+
+/// Packed texture generator functions.
+/// These combine individual PBR properties into optimally packed textures
+/// according to BEVY_STANDARD_MATERIAL_TEXTURE_PACKING.md.
+mod packed {
+    use super::*;
+
+    /// Base color + Opacity (sRGB)
+    /// RGB = base_color, A = opacity
+    pub fn base_color(uv: Vec2) -> Vec4 {
+        textures::base_color_texture(uv)
+    }
+
+    /// Normal map (Linear)
+    /// RGB = normal vector
+    pub fn normal(uv: Vec2) -> Vec3 {
+        textures::normal_map_texture(uv)
+    }
+
+    /// ORM: Occlusion, Roughness, Metallic (Linear)
+    /// R = occlusion, G = roughness, B = metallic
+    pub fn orm(uv: Vec2) -> Vec3 {
+        let occlusion = textures::occlusion_texture(uv);
+        let mr = textures::metallic_roughness_texture(uv);
+        Vec3::new(occlusion, mr.x, mr.y) // R=occlusion, G=roughness, B=metallic
+    }
+
+    /// Emissive (sRGB)
+    /// RGB = emissive color
+    pub fn emissive(uv: Vec2) -> Vec3 {
+        textures::emissive_texture(uv)
+    }
+
+    /// Transmission (Linear)
+    /// R = specular_transmission, G = thickness, A = diffuse_transmission
+    pub fn transmission(uv: Vec2) -> Vec4 {
+        let specular_trans = textures::specular_transmission_texture(uv);
+        let thickness = textures::thickness_texture(uv);
+        let diffuse_trans = textures::diffuse_transmission_texture(uv);
+        Vec4::new(specular_trans, thickness, 0.0, diffuse_trans)
+    }
+
+    /// Specular + Specular Tint (Linear for specular, sRGB for tint)
+    /// RGB = specular_tint, A = specular
+    pub fn specular(uv: Vec2) -> Vec4 {
+        let tint = textures::specular_tint_texture(uv);
+        let specular = textures::specular_texture(uv);
+        Vec4::new(tint.x, tint.y, tint.z, specular)
+    }
+
+    /// Clearcoat (Linear)
+    /// R = clearcoat, G = clearcoat_roughness
+    pub fn clearcoat(uv: Vec2) -> Vec2 {
+        let clearcoat = textures::clearcoat_texture(uv);
+        let roughness = textures::clearcoat_roughness_texture(uv);
+        Vec2::new(clearcoat, roughness)
+    }
+
+    /// Clearcoat Normal (Linear)
+    /// RGB = clearcoat normal vector
+    pub fn clearcoat_normal(uv: Vec2) -> Vec3 {
+        textures::clearcoat_normal_texture(uv)
+    }
+
+    /// Anisotropy (Linear)
+    /// RG = direction, B = strength
+    pub fn anisotropy(uv: Vec2) -> Vec3 {
+        textures::anisotropy_texture(uv)
+    }
+
+    /// Depth / Parallax (Linear)
+    /// R = parallax depth
+    pub fn depth(uv: Vec2) -> f32 {
+        textures::depth_map(uv)
     }
 }
 
@@ -63,62 +150,108 @@ fn main() {
         fs::create_dir_all(&args.output_dir).expect("Failed to create output directory");
     }
 
-    // Define all textures with their configurations
-    // Note: Bevy PBR texture channel mappings:
-    // - base_color_texture: RGB = color, A = opacity
-    // - emissive_texture: RGB = emissive color
-    // - metallic_roughness_texture: B = metallic, G = roughness
-    // - diffuse_transmission_texture: A = transmission
-    // - specular_transmission_texture: R = transmission
-    // - thickness_texture: G = thickness
+    // Packed textures following BEVY_STANDARD_MATERIAL_TEXTURE_PACKING.md
+    // These combine multiple PBR properties into single textures for optimal packing.
     let textures: Vec<TextureConfig> = vec![
-        // Base color: RGB = color, A = 1.0 (opaque)
-        // Vec2.x -> R, Vec2.y -> G, B = 0.0, A = 1.0
+        // Base: RGB = base_color, A = opacity (sRGB)
         TextureConfig::new(
-            "base_color_texture",
-            textures::base_color_texture,
+            "base_color",
+            |uv| TextureValue::Vec4(packed::base_color(uv)),
             true, // sRGB
-            |v| [v.x, v.y, 0.0, 1.0],
+            |v| match v {
+                TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
+                _ => [1.0, 1.0, 1.0, 1.0],
+            },
         ),
-        // Emissive: RGB = emissive color, A = 1.0
-        // Vec2.x -> R, Vec2.y -> G, B = 0.0, A = 1.0
+        // Normal: RGB = normal vector (Linear)
         TextureConfig::new(
-            "emissive_texture",
-            textures::emissive_texture,
+            "normal",
+            |uv| TextureValue::Vec3(packed::normal(uv)),
+            false, // Linear
+            |v| match v {
+                TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
+                _ => [0.5, 0.5, 1.0, 1.0],
+            },
+        ),
+        // ORM: R = occlusion, G = roughness, B = metallic (Linear)
+        TextureConfig::new(
+            "orm",
+            |uv| TextureValue::Vec3(packed::orm(uv)),
+            false, // Linear
+            |v| match v {
+                TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
+                _ => [1.0, 0.5, 0.0, 1.0],
+            },
+        ),
+        // Emissive: RGB = emissive color (sRGB)
+        TextureConfig::new(
+            "emissive",
+            |uv| TextureValue::Vec3(packed::emissive(uv)),
             true, // sRGB
-            |v| [v.x, v.y, 0.0, 1.0],
+            |v| match v {
+                TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
+                _ => [0.0, 0.0, 0.0, 1.0],
+            },
         ),
-        // Metallic-roughness: B = metallic, G = roughness, R = 0.0, A = 1.0
-        // Vec2.x -> roughness (G), Vec2.y -> metallic (B)
+        // Transmission: R = specular_transmission, G = thickness, B = 0, A = diffuse_transmission (Linear)
         TextureConfig::new(
-            "metallic_roughness_texture",
-            textures::metallic_roughness_texture,
-            false,                    // Linear
-            |v| [0.0, v.x, v.y, 1.0], // R=0.0, G=roughness, B=metallic, A=1.0
+            "transmission",
+            |uv| TextureValue::Vec4(packed::transmission(uv)),
+            false, // Linear
+            |v| match v {
+                TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
+                _ => [0.0, 0.0, 0.0, 0.0],
+            },
         ),
-        // Diffuse transmission: A = transmission, RGB = 1.0
-        // Vec2.x -> transmission (A)
+        // Specular: RGB = specular_tint, A = specular (Linear for alpha channel)
         TextureConfig::new(
-            "diffuse_transmission_texture",
-            textures::diffuse_transmission_texture,
-            false,                    // Linear
-            |v| [1.0, 1.0, 1.0, v.x], // R=1.0, G=1.0, B=1.0, A=transmission
+            "specular",
+            |uv| TextureValue::Vec4(packed::specular(uv)),
+            true, // sRGB for tint colors, but specular is linear - using true as tint dominates
+            |v| match v {
+                TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
+                _ => [1.0, 1.0, 1.0, 0.0],
+            },
         ),
-        // Specular transmission: R = transmission, GBA = 1.0
-        // Vec2.x -> transmission (R)
+        // Clearcoat: R = clearcoat, G = clearcoat_roughness (Linear)
         TextureConfig::new(
-            "specular_transmission_texture",
-            textures::specular_transmission_texture,
-            false,                    // Linear
-            |v| [v.x, 1.0, 1.0, 1.0], // R=transmission, G=1.0, B=1.0, A=1.0
+            "clearcoat",
+            |uv| TextureValue::Vec2(packed::clearcoat(uv)),
+            false, // Linear
+            |v| match v {
+                TextureValue::Vec2(v) => [v.x, v.y, 0.0, 1.0],
+                _ => [0.0, 0.0, 0.0, 1.0],
+            },
         ),
-        // Thickness: G = thickness, RBA = 1.0
-        // Vec2.x -> thickness (G)
+        // Clearcoat Normal: RGB = clearcoat normal (Linear)
         TextureConfig::new(
-            "thickness_texture",
-            textures::thickness_texture,
-            false,                    // Linear
-            |v| [1.0, v.x, 1.0, 1.0], // R=1.0, G=thickness, B=1.0, A=1.0
+            "clearcoat_normal",
+            |uv| TextureValue::Vec3(packed::clearcoat_normal(uv)),
+            false, // Linear
+            |v| match v {
+                TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
+                _ => [0.5, 0.5, 1.0, 1.0],
+            },
+        ),
+        // Anisotropy: R = dir_x, G = dir_y, B = strength (Linear)
+        TextureConfig::new(
+            "anisotropy",
+            |uv| TextureValue::Vec3(packed::anisotropy(uv)),
+            false, // Linear
+            |v| match v {
+                TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
+                _ => [0.0, 0.0, 0.0, 1.0],
+            },
+        ),
+        // Depth: R = parallax depth (Linear)
+        TextureConfig::new(
+            "depth",
+            |uv| TextureValue::F32(packed::depth(uv)),
+            false, // Linear
+            |v| match v {
+                TextureValue::F32(v) => [v, 0.0, 0.0, 1.0],
+                _ => [0.0, 0.0, 0.0, 1.0],
+            },
         ),
     ];
 
@@ -153,11 +286,11 @@ fn generate_texture(config: &TextureConfig, resolution: u32, path: &PathBuf) {
                 y as f32 / (height - 1) as f32,
             );
 
-            // Generate texture value
+            // Generate texture value (wrapped in TextureValue enum)
             let tex_value = (config.generator)(uv);
 
-            // Map to RGBA channels
-            let rgba = (config.channel_map)(tex_value);
+            // Pack to RGBA channels using the texture-specific pack function
+            let rgba = (config.pack_fn)(tex_value);
 
             // Convert to u8 (0-255)
             let r = (rgba[0].clamp(0.0, 1.0) * 255.0) as u8;
