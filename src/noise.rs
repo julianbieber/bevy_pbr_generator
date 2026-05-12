@@ -114,7 +114,6 @@ pub fn perlin_noise(uv: Vec2, scale: f32) -> f32 {
     let y1_val = grad(sx, sy - 1.0, c);
     let y2_val = grad(sx - 1.0, sy - 1.0, d);
 
-    // Interpolate
     let ix0 = x1_val + u * (x2_val - x1_val);
     let ix1 = y1_val + u * (y2_val - y1_val);
     ix0 + v * (ix1 - ix0)
@@ -135,13 +134,11 @@ fn p(x: i32, y: i32) -> u8 {
 pub fn simplex_noise(uv: Vec2, scale: f32) -> f32 {
     let scaled_uv = uv * scale;
 
-    // Skew the input space to determine which simplex cell we're in
     let skew = (1.0 / 3.0) * (2.0f32.sqrt() + 1.0);
     let s = (scaled_uv.x + scaled_uv.y) * skew;
     let i = s.floor() as i32;
     let j = (scaled_uv.y + (i as f32) * (1.0 / skew)).floor() as i32;
 
-    // Unskew the cell origin back to (x,y) space
     let t = (i + j) as f32 * skew;
     let x0 = scaled_uv.x - i as f32 + t;
     let y0 = scaled_uv.y - j as f32 + t;
@@ -279,6 +276,5 @@ pub fn combined_noise(uv: Vec2) -> f32 {
     let value = value_noise(uv, 5.0);
     let worley = worley_noise(uv, 5.0, 20);
 
-    // Normalize and combine
     (perlin + simplex + value + worley) / 4.0
 }
