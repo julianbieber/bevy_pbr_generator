@@ -3,7 +3,7 @@
 
 # Default recipe - build and check
 default:
-    just check
+    @just --list
 
 # Build the project
 build:
@@ -22,11 +22,11 @@ check: build clippy
 
 # Run the application with default settings
 run:
-    cargo run
+    cargo run --release
 
 # Run with custom resolution
 run-res *args:
-    cargo run -- {{args}}
+    cargo run --release -- {{args}}
 
 # Format code
 fmt:
@@ -40,14 +40,7 @@ clean:
 docs:
     cargo doc --open
 
-# Install the binary locally
-install:
-    cargo install --path .
-
 # Update dependencies
 update:
     cargo update
 
-# Show help
-help:
-    @just --list

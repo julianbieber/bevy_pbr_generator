@@ -1,48 +1,40 @@
 //! Per-texture generation functions for Bevy PBR materials.
 //!
-//! Each function takes normalized UV coordinates (Vec2 in [0.0, 1.0]) and returns a Vec2.
+//! Each function takes normalized UV coordinates (Vec2 in [0.0, 1.0]) and returns a Vec3.
 //! Users can edit these functions to customize texture generation.
 
-use glam::Vec2;
+use glam::{Vec2, Vec3, Vec4};
 
 /// Base color texture (sRGB).
-/// Default: solid white (Vec2::new(1.0, 1.0)).
-/// Bevy: RGB = color, A = opacity (but we return Vec2 for RG).
-pub fn base_color_texture(_uv: Vec2) -> Vec2 {
-    // Default: solid white
-    Vec2::new(1.0, 1.0)
+/// Bevy: RGB = color, A = opacity
+pub fn base_color_texture(_uv: Vec2) -> Vec4 {
+    Vec4::ONE
 }
 
 /// Emissive texture (sRGB).
-/// Default: solid black (Vec2::new(0.0, 0.0)).
 /// Bevy: RGB = emissive color.
-pub fn emissive_texture(_uv: Vec2) -> Vec2 {
-    // Default: solid black
-    Vec2::new(0.0, 0.0)
+pub fn emissive_texture(_uv: Vec2) -> Vec3 {
+    Vec3::ONE
 }
 
 /// Metallic-roughness texture (linear).
-/// Default: x = 0.5 (roughness), y = 0.0 (metallic).
-/// Bevy: B = metallic, G = roughness.
+/// Bevy: B(y) = metallic, G(x) = roughness.
 pub fn metallic_roughness_texture(_uv: Vec2) -> Vec2 {
-    // Default: roughness = 0.5, metallic = 0.0
-    Vec2::new(0.5, 0.0) // x = roughness, y = metallic
+    Vec2::new(0.5, 0.0)
 }
 
 /// Diffuse transmission texture (linear).
-/// Default: x = 0.0 (no transmission).
+/// Default: 0.0 (no transmission).
 /// Bevy: A = transmission.
-pub fn diffuse_transmission_texture(_uv: Vec2) -> Vec2 {
-    // Default: no transmission
-    Vec2::new(0.0, 0.0) // x = transmission (stored in alpha channel)
+pub fn diffuse_transmission_texture(_uv: Vec2) -> f32 {
+    0.0
 }
 
 /// Specular transmission texture (linear).
-/// Default: x = 0.0 (no transmission).
+/// Default: 0.0 (no transmission).
 /// Bevy: R = transmission.
-pub fn specular_transmission_texture(_uv: Vec2) -> Vec2 {
-    // Default: no transmission
-    Vec2::new(0.0, 0.0) // x = transmission (stored in red channel)
+pub fn specular_transmission_texture(_uv: Vec2) -> f32 {
+    0.0 // x = transmission (stored in red channel)
 }
 
 /// Thickness texture (linear).
