@@ -48,7 +48,7 @@ const WATER_EMISSIVE_INTENSITY: f32 = 0.05;
 
 /// Base color texture (sRGB).
 /// Bevy: RGB = color, A = opacity
-/// 
+///
 /// Creates water color with:
 /// - Deep blue base
 /// - Shallow water variation via noise
@@ -58,25 +58,25 @@ pub fn base_color_texture(uv: Vec2) -> Vec4 {
     // Large-scale depth variation
     let depth_noise = crate::noise::perlin_noise(uv, WAVE_SCALE * 0.5);
     let depth_factor = (depth_noise + 1.0) / 2.0; // [0, 1]
-    
+
     // Small-scale ripple detail
     let ripple_noise = crate::noise::perlin_noise(uv, RIPPLE_SCALE);
     let ripple_factor = (ripple_noise + 1.0) / 2.0;
-    
+
     // Wave crest detection (high frequency noise for foam)
     let crest_noise = crate::noise::simplex_noise(uv * WAVE_SCALE, WAVE_FREQUENCY);
     let crest_factor = ((crest_noise + 1.0) / 2.0).powi(2); // Sharper crests
-    
+
     // Blend between deep and shallow water based on depth
     let base_color = WATER_DEEP_COLOR.lerp(WATER_SHALLOW_COLOR, depth_factor);
-    
+
     // Add crest highlights
     let crest_color = WATER_CREST_COLOR.lerp(base_color, 0.7);
     let final_color = base_color.lerp(crest_color, crest_factor * 0.3);
-    
+
     // Add subtle ripple variation
     let ripple_variation = Vec3::splat(0.02) * (ripple_factor - 0.5);
-    
+
     Vec4::new(
         (final_color.x + ripple_variation.x).clamp(0.0, 1.0),
         (final_color.y + ripple_variation.y).clamp(0.0, 1.0),
@@ -87,20 +87,20 @@ pub fn base_color_texture(uv: Vec2) -> Vec4 {
 
 /// Emissive texture (sRGB).
 /// Bevy: RGB = emissive color.
-/// 
+///
 /// Creates subtle blue-cyan glow, stronger at wave crests
 /// (simulating bioluminescence or light refraction).
 pub fn emissive_texture(uv: Vec2) -> Vec3 {
     // Use wave crest noise for emissive variation
     let crest_noise = crate::noise::simplex_noise(uv * WAVE_SCALE, WAVE_FREQUENCY);
     let crest_factor = ((crest_noise + 1.0) / 2.0).powi(2);
-    
+
     // Deep water glow (bioluminescence effect)
     let deep_glow = Vec3::new(0.1, 0.3, 0.6) * WATER_EMISSIVE_INTENSITY;
-    
+
     // Crest glow (foam/moonlight reflection)
     let crest_glow = Vec3::new(0.7, 0.85, 0.95) * WATER_EMISSIVE_INTENSITY * 1.5;
-    
+
     // Blend based on crest factor
     deep_glow.lerp(crest_glow, crest_factor)
 }
@@ -108,7 +108,7 @@ pub fn emissive_texture(uv: Vec2) -> Vec3 {
 /// Metallic-roughness texture (linear).
 /// Bevy: G = roughness, B = metallic.
 /// Returns Vec2 where x = roughness, y = metallic.
-/// 
+///
 /// Water is non-metallic (dielectric) with variable roughness.
 /// Roughness increases at wave crests and with surface disturbance.
 pub fn metallic_roughness_texture(uv: Vec2) -> Vec2 {
@@ -122,23 +122,23 @@ pub fn metallic_roughness_texture(uv: Vec2) -> Vec2 {
         crate::noise::perlin_noise,
     );
     let wave_factor = (wave_noise + 1.0) / 2.0; // [0, 1]
-    
+
     // Crest roughness (foam areas are rougher)
     let crest_noise = crate::noise::simplex_noise(uv * WAVE_SCALE * 1.5, WAVE_FREQUENCY * 2.0);
     let crest_factor = ((crest_noise + 1.0) / 2.0).powi(3); // Very sharp crests
-    
+
     // Calculate roughness: base + wave variation + crest boost
     let roughness = WATER_BASE_ROUGHNESS
         + (WATER_CREST_ROUGHNESS - WATER_BASE_ROUGHNESS) * crest_factor
         + (WATER_CREST_ROUGHNESS - WATER_BASE_ROUGHNESS) * wave_factor * 0.3;
-    
+
     // Water is non-metallic
     Vec2::new(roughness.clamp(0.0, 1.0), 0.0)
 }
 
 /// Normal map texture (linear).
 /// Bevy: RGB = normal vector (tangent space).
-/// 
+///
 /// Creates water surface normals with:
 /// - Large wave undulations
 /// - Small ripples
@@ -146,35 +146,39 @@ pub fn metallic_roughness_texture(uv: Vec2) -> Vec2 {
 pub fn normal_map_texture(uv: Vec2) -> Vec3 {
     // Normal mapping: calculate surface normal from height map
     const EPSILON: f32 = 1.0 / 1024.0;
-    
+
     // Sample height at neighboring points
-    let height_x_plus = crate::noise::perlin_noise(uv + Vec2::new(EPSILON, 0.0), WAVE_SCALE * 0.8) * 0.5
+    let height_x_plus = crate::noise::perlin_noise(uv + Vec2::new(EPSILON, 0.0), WAVE_SCALE * 0.8)
+        * 0.5
         + crate::noise::perlin_noise(uv + Vec2::new(EPSILON, 0.0), WAVE_SCALE * 1.5) * 0.3
         + crate::noise::perlin_noise(uv + Vec2::new(EPSILON, 0.0), RIPPLE_SCALE) * 0.2
         + ((uv.x + EPSILON) * WAVE_SCALE * 0.5 + uv.y * WAVE_SCALE * 0.5).sin() * 0.15;
-    
-    let height_x_minus = crate::noise::perlin_noise(uv + Vec2::new(-EPSILON, 0.0), WAVE_SCALE * 0.8) * 0.5
-        + crate::noise::perlin_noise(uv + Vec2::new(-EPSILON, 0.0), WAVE_SCALE * 1.5) * 0.3
-        + crate::noise::perlin_noise(uv + Vec2::new(-EPSILON, 0.0), RIPPLE_SCALE) * 0.2
-        + ((uv.x - EPSILON) * WAVE_SCALE * 0.5 + uv.y * WAVE_SCALE * 0.5).sin() * 0.15;
-    
-    let height_y_plus = crate::noise::perlin_noise(uv + Vec2::new(0.0, EPSILON), WAVE_SCALE * 0.8) * 0.5
+
+    let height_x_minus =
+        crate::noise::perlin_noise(uv + Vec2::new(-EPSILON, 0.0), WAVE_SCALE * 0.8) * 0.5
+            + crate::noise::perlin_noise(uv + Vec2::new(-EPSILON, 0.0), WAVE_SCALE * 1.5) * 0.3
+            + crate::noise::perlin_noise(uv + Vec2::new(-EPSILON, 0.0), RIPPLE_SCALE) * 0.2
+            + ((uv.x - EPSILON) * WAVE_SCALE * 0.5 + uv.y * WAVE_SCALE * 0.5).sin() * 0.15;
+
+    let height_y_plus = crate::noise::perlin_noise(uv + Vec2::new(0.0, EPSILON), WAVE_SCALE * 0.8)
+        * 0.5
         + crate::noise::perlin_noise(uv + Vec2::new(0.0, EPSILON), WAVE_SCALE * 1.5) * 0.3
         + crate::noise::perlin_noise(uv + Vec2::new(0.0, EPSILON), RIPPLE_SCALE) * 0.2
         + (uv.x * WAVE_SCALE * 0.5 + (uv.y + EPSILON) * WAVE_SCALE * 0.5).sin() * 0.15;
-    
-    let height_y_minus = crate::noise::perlin_noise(uv + Vec2::new(0.0, -EPSILON), WAVE_SCALE * 0.8) * 0.5
-        + crate::noise::perlin_noise(uv + Vec2::new(0.0, -EPSILON), WAVE_SCALE * 1.5) * 0.3
-        + crate::noise::perlin_noise(uv + Vec2::new(0.0, -EPSILON), RIPPLE_SCALE) * 0.2
-        + (uv.x * WAVE_SCALE * 0.5 + (uv.y - EPSILON) * WAVE_SCALE * 0.5).sin() * 0.15;
-    
+
+    let height_y_minus =
+        crate::noise::perlin_noise(uv + Vec2::new(0.0, -EPSILON), WAVE_SCALE * 0.8) * 0.5
+            + crate::noise::perlin_noise(uv + Vec2::new(0.0, -EPSILON), WAVE_SCALE * 1.5) * 0.3
+            + crate::noise::perlin_noise(uv + Vec2::new(0.0, -EPSILON), RIPPLE_SCALE) * 0.2
+            + (uv.x * WAVE_SCALE * 0.5 + (uv.y - EPSILON) * WAVE_SCALE * 0.5).sin() * 0.15;
+
     // Calculate derivatives
     let dzdx = (height_x_plus - height_x_minus) / (2.0 * EPSILON);
     let dzdy = (height_y_plus - height_y_minus) / (2.0 * EPSILON);
-    
+
     // Calculate normal in world space
     let normal_ws = Vec3::new(-dzdx, -dzdy, 1.0).normalize();
-    
+
     // Convert to tangent space (for normal maps, +X = right, +Y = up, +Z = out of surface)
     // For a simple water surface, we assume standard tangent space
     // N.x (red) = +X component, N.y (green) = -Y component, N.z (blue) = Z component
@@ -188,7 +192,7 @@ pub fn normal_map_texture(uv: Vec2) -> Vec3 {
 
 /// Occlusion texture (linear).
 /// Bevy: R = occlusion.
-/// 
+///
 /// Water surface has high occlusion (is transparent/clear).
 /// Subtle variation based on wave shadows.
 pub fn occlusion_texture(uv: Vec2) -> f32 {
@@ -196,7 +200,7 @@ pub fn occlusion_texture(uv: Vec2) -> f32 {
     // Add subtle variation from waves casting shadows
     let wave_shadow = crate::noise::perlin_noise(uv, WAVE_SCALE * 0.5);
     let shadow_factor = (wave_shadow + 1.0) / 2.0; // [0, 1]
-    
+
     // Base occlusion with slight shadow variation
     (0.95 - shadow_factor * 0.05).clamp(0.85, 1.0)
 }
@@ -210,7 +214,7 @@ pub fn specular_texture(_uv: Vec2) -> f32 {
 
 /// Specular tint texture (sRGB).
 /// Bevy: RGB = specular tint color.
-/// 
+///
 /// Water specular highlights are typically white to light blue
 pub fn specular_tint_texture(_uv: Vec2) -> Vec3 {
     Vec3::new(0.9, 0.95, 1.0)
@@ -236,17 +240,17 @@ pub fn clearcoat_normal_texture(_uv: Vec2) -> Vec3 {
 
 /// Anisotropy texture (linear).
 /// Bevy: RG = anisotropy direction, B = anisotropy strength.
-/// 
+///
 /// Water can have slight anisotropy due to wave direction
 pub fn anisotropy_texture(uv: Vec2) -> Vec3 {
     // Calculate wave direction
     let wave_angle = uv.x * WAVE_SCALE * 0.5;
     let direction = Vec2::new(wave_angle.sin(), wave_angle.cos());
-    
+
     // Anisotropy strength varies with wave intensity
     let wave_intensity = crate::noise::perlin_noise(uv, WAVE_SCALE);
     let strength = ((wave_intensity + 1.0) / 2.0 * 0.3).clamp(0.0, 0.3);
-    
+
     Vec3::new(direction.x, direction.y, strength)
 }
 
@@ -260,7 +264,7 @@ pub fn depth_map(uv: Vec2) -> f32 {
 
 /// Diffuse transmission texture (linear).
 /// Bevy: A = transmission.
-/// 
+///
 /// How much light passes through the water diffusely
 pub fn diffuse_transmission_texture(_uv: Vec2) -> f32 {
     WATER_DIFFUSE_TRANSMISSION
@@ -268,7 +272,7 @@ pub fn diffuse_transmission_texture(_uv: Vec2) -> f32 {
 
 /// Specular transmission texture (linear).
 /// Bevy: R = transmission.
-/// 
+///
 /// How much light passes through the water specularly (refraction)
 pub fn specular_transmission_texture(_uv: Vec2) -> f32 {
     WATER_SPECULAR_TRANSMISSION
@@ -276,7 +280,7 @@ pub fn specular_transmission_texture(_uv: Vec2) -> f32 {
 
 /// Thickness texture (linear).
 /// Bevy: G = thickness.
-/// 
+///
 /// Water thickness affects light absorption
 pub fn thickness_texture(_uv: Vec2) -> f32 {
     WATER_THICKNESS
