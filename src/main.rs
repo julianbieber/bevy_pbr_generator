@@ -6,7 +6,7 @@
 use std::fs;
 
 use clap::Parser;
-use config::{Args, TextureConfig, TextureValue};
+use config::{Args, TextureConfig, TextureType, TextureValue};
 use generator::generate_texture;
 
 mod config;
@@ -22,10 +22,12 @@ fn main() {
         fs::create_dir_all(&args.output_dir).expect("Failed to create output directory");
     }
 
+    let texture_type = args.texture_type;
+
     let textures: Vec<TextureConfig> = vec![
         TextureConfig::new(
             "base_color",
-            |uv| TextureValue::Vec4(packed::base_color(uv)),
+            move |uv| TextureValue::Vec4(packed::base_color(uv, texture_type)),
             true,
             |v| match v {
                 TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
@@ -34,7 +36,7 @@ fn main() {
         ),
         TextureConfig::new(
             "normal",
-            |uv| TextureValue::Vec3(packed::normal(uv)),
+            move |uv| TextureValue::Vec3(packed::normal(uv, texture_type)),
             false,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
@@ -43,7 +45,7 @@ fn main() {
         ),
         TextureConfig::new(
             "orm",
-            |uv| TextureValue::Vec3(packed::orm(uv)),
+            move |uv| TextureValue::Vec3(packed::orm(uv, texture_type)),
             false,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
@@ -52,7 +54,7 @@ fn main() {
         ),
         TextureConfig::new(
             "emissive",
-            |uv| TextureValue::Vec3(packed::emissive(uv)),
+            move |uv| TextureValue::Vec3(packed::emissive(uv, texture_type)),
             true,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
@@ -61,7 +63,7 @@ fn main() {
         ),
         TextureConfig::new(
             "transmission",
-            |uv| TextureValue::Vec4(packed::transmission(uv)),
+            move |uv| TextureValue::Vec4(packed::transmission(uv, texture_type)),
             false,
             |v| match v {
                 TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
@@ -70,7 +72,7 @@ fn main() {
         ),
         TextureConfig::new(
             "specular",
-            |uv| TextureValue::Vec4(packed::specular(uv)),
+            move |uv| TextureValue::Vec4(packed::specular(uv, texture_type)),
             true,
             |v| match v {
                 TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
@@ -79,7 +81,7 @@ fn main() {
         ),
         TextureConfig::new(
             "clearcoat",
-            |uv| TextureValue::Vec2(packed::clearcoat(uv)),
+            move |uv| TextureValue::Vec2(packed::clearcoat(uv, texture_type)),
             false,
             |v| match v {
                 TextureValue::Vec2(v) => [v.x, v.y, 0.0, 1.0],
@@ -88,7 +90,7 @@ fn main() {
         ),
         TextureConfig::new(
             "clearcoat_normal",
-            |uv| TextureValue::Vec3(packed::clearcoat_normal(uv)),
+            move |uv| TextureValue::Vec3(packed::clearcoat_normal(uv, texture_type)),
             false,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
@@ -97,7 +99,7 @@ fn main() {
         ),
         TextureConfig::new(
             "anisotropy",
-            |uv| TextureValue::Vec3(packed::anisotropy(uv)),
+            move |uv| TextureValue::Vec3(packed::anisotropy(uv, texture_type)),
             false,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
@@ -106,7 +108,7 @@ fn main() {
         ),
         TextureConfig::new(
             "depth",
-            |uv| TextureValue::F32(packed::depth(uv)),
+            move |uv| TextureValue::F32(packed::depth(uv, texture_type)),
             false,
             |v| match v {
                 TextureValue::F32(v) => [v, 0.0, 0.0, 1.0],
@@ -115,9 +117,14 @@ fn main() {
         ),
     ];
 
+    let texture_name = match texture_type {
+        TextureType::Water => "water",
+        TextureType::Rocky => "rocky ground",
+    };
+
     println!(
-        "Generating {}x{} textures...",
-        args.resolution, args.resolution
+        "Generating {}x{} {} textures...",
+        args.resolution, args.resolution, texture_name
     );
 
     for config in &textures {

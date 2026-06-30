@@ -286,7 +286,221 @@ pub fn thickness_texture(_uv: Vec2) -> f32 {
     WATER_THICKNESS
 }
 
+
+// Example: Perlin noise-based base color.
+// pub fn base_color_texture(uv: Vec2) -> Vec4 {
+//     let noise = crate::noise::perlin_noise(uv, 5.0);
+//     let r = (noise + 1.0) / 2.0; // Map from [-1, 1] to [0, 1]
+//     Vec4::new(r, r * 0.5, 0.0, 1.0)
+// }
+
+// Example: Worley noise-based metallic-roughness.
+// pub fn metallic_roughness_texture(uv: Vec2) -> Vec2 {
+//     let noise = crate::noise::worley_noise(uv, 10.0, 30);
+//     let roughness = noise.clamp(0.0, 1.0);
+//     let metallic = (crate::noise::perlin_noise(uv, 2.0) + 1.0) / 2.0;
+//     Vec2::new(roughness, metallic) // x = roughness, y = metallic
+// }
+
+// Example: Combined noise for emissive texture.
+// ========== Rocky Ground Texture Parameters ==========
+// pub fn emissive_texture(uv: Vec2) -> Vec3 {
+//     let noise = crate::noise::combined_noise(uv);
+//     let intensity = (noise + 1.0) / 2.0;
+// }
+// ========== Rocky Ground Texture Parameters ==========
+// ========== Rocky Ground Texture Parameters ==========
+
+/// Dark brown/black - base rock color
+const ROCKY_BASE_COLOR: Vec3 = Vec3::new(0.25, 0.18, 0.12);
+/// Medium brown - primary rock color
+const ROCKY_MID_COLOR: Vec3 = Vec3::new(0.45, 0.32, 0.20);
+/// Light gray/tan - highlighted rock edges
+const ROCKY_HIGHLIGHT_COLOR: Vec3 = Vec3::new(0.65, 0.55, 0.45);
+/// Pale gray - dry/weathered rock
+const ROCKY_DRY_COLOR: Vec3 = Vec3::new(0.75, 0.70, 0.65);
+
+/// Scale for large rock formations
+const ROCK_SCALE: f32 = 12.0;
+/// Scale for small rock details
+const ROCK_DETAIL_SCALE: f32 = 30.0;
+/// Scale for fine grain
+const ROCK_GRAIN_SCALE: f32 = 50.0;
+/// Number of noise octaves for rock detail
+const ROCK_OCTAVES: usize = 4;
+
+/// Base roughness for rocky surface (high - very rough)
+const ROCK_BASE_ROUGHNESS: f32 = 0.85;
+/// Roughness variation range
+const ROCK_ROUGHNESS_VARIATION: f32 = 0.10;
+/// Metallic value for rocks (very low - non-metallic)
+const ROCK_METALLIC: f32 = 0.02;
+
+/// Occlusion base (rocks have deep shadows)
+const ROCK_BASE_OCCLUSION: f32 = 0.6;
+
+// ========== Rocky Ground Texture Functions ==========
+
+/// Base color texture for rocky ground (sRGB).
+pub fn rocky_base_color_texture(uv: Vec2) -> Vec4 {
+    let formation_noise = crate::noise::perlin_noise(uv, ROCK_SCALE * 0.8);
+    let formation_factor = (formation_noise + 1.0) / 2.0;
+    let detail_noise = crate::noise::perlin_noise(uv, ROCK_DETAIL_SCALE);
+    let detail_factor = (detail_noise + 1.0) / 2.0;
+    let grain_noise = crate::noise::perlin_noise(uv, ROCK_GRAIN_SCALE);
+    let grain_factor = (grain_noise + 1.0) / 2.0;
+
+    let base_color = ROCKY_BASE_COLOR.lerp(ROCKY_MID_COLOR, formation_factor);
+    let detail_color = ROCKY_MID_COLOR.lerp(ROCKY_HIGHLIGHT_COLOR, detail_factor);
+    let mixed_color = base_color.lerp(detail_color, 0.4);
+    let grain_variation = Vec3::splat(0.03) * (grain_factor - 0.5);
+
+    let dry_noise = crate::noise::simplex_noise(uv * ROCK_DETAIL_SCALE, 2.0);
+    let dry_factor = ((dry_noise + 1.0) / 2.0).powi(2);
+    let final_color = mixed_color.lerp(ROCKY_DRY_COLOR, dry_factor * 0.2);
+
+    Vec4::new(
+        (final_color.x + grain_variation.x).clamp(0.0, 1.0),
+        (final_color.y + grain_variation.y).clamp(0.0, 1.0),
+        (final_color.z + grain_variation.z).clamp(0.0, 1.0),
+        1.0,
+    )
+}
+
+/// Emissive texture for rocky ground (sRGB).
+pub fn rocky_emissive_texture(_uv: Vec2) -> Vec3 {
+    Vec3::new(0.01, 0.005, 0.002)
+}
+
+/// Metallic-roughness texture for rocky ground (linear).
+pub fn rocky_metallic_roughness_texture(uv: Vec2) -> Vec2 {
+    let noise = crate::noise::fbm(
+        uv,
+        ROCK_SCALE,
+        ROCK_OCTAVES,
+        2.0,
+        0.5,
+        crate::noise::perlin_noise,
+    );
+    let noise_factor = (noise + 1.0) / 2.0;
+    let roughness = (ROCK_BASE_ROUGHNESS
+        + (noise_factor - 0.5) * ROCK_ROUGHNESS_VARIATION * 2.0)
+        .clamp(0.75, 0.98);
+    Vec2::new(roughness, ROCK_METALLIC)
+}
+
+/// Normal map texture for rocky ground (linear).
+pub fn rocky_normal_map_texture(uv: Vec2) -> Vec3 {
+    const EPSILON: f32 = 1.0 / 1024.0;
+
+    let height = |offset: Vec2| -> f32 {
+        crate::noise::perlin_noise(uv + offset, ROCK_SCALE * 0.6) * 0.5
+            + crate::noise::perlin_noise(uv + offset, ROCK_SCALE * 1.2) * 0.3
+            + crate::noise::perlin_noise(uv + offset, ROCK_DETAIL_SCALE) * 0.15
+            + crate::noise::perlin_noise(uv + offset, ROCK_GRAIN_SCALE) * 0.05
+    };
+
+    let height_x_plus = height(Vec2::new(EPSILON, 0.0));
+    let height_x_minus = height(Vec2::new(-EPSILON, 0.0));
+    let height_y_plus = height(Vec2::new(0.0, EPSILON));
+    let height_y_minus = height(Vec2::new(0.0, -EPSILON));
+
+    let dzdx = (height_x_plus - height_x_minus) / (2.0 * EPSILON);
+    let dzdy = (height_y_plus - height_y_minus) / (2.0 * EPSILON);
+    let normal_ws = Vec3::new(-dzdx, -dzdy, 1.0).normalize();
+
+    Vec3::new(
+        (normal_ws.x * 0.5) + 0.5,
+        (-normal_ws.y * 0.5) + 0.5,
+        normal_ws.z * 0.5 + 0.5,
+    )
+}
+
+/// Occlusion texture for rocky ground (linear).
+pub fn rocky_occlusion_texture(uv: Vec2) -> f32 {
+    let formation_shadow = crate::noise::perlin_noise(uv, ROCK_SCALE * 0.5);
+    let shadow_factor = (formation_shadow + 1.0) / 2.0;
+    let detail_shadow = crate::noise::perlin_noise(uv, ROCK_DETAIL_SCALE);
+    let detail_factor = (detail_shadow + 1.0) / 2.0;
+    (ROCK_BASE_OCCLUSION - shadow_factor * 0.25 - detail_factor * 0.15).clamp(0.4, 0.85)
+}
+
+/// Specular texture for rocky ground (linear).
+pub fn rocky_specular_texture(_uv: Vec2) -> f32 {
+    0.05
+}
+
+/// Specular tint texture for rocky ground (sRGB).
+pub fn rocky_specular_tint_texture(_uv: Vec2) -> Vec3 {
+    Vec3::new(0.8, 0.75, 0.7)
+}
+
+/// Clearcoat texture for rocky ground (linear).
+pub fn rocky_clearcoat_texture(_uv: Vec2) -> f32 {
+    0.0
+}
+
+/// Clearcoat roughness texture for rocky ground (linear).
+pub fn rocky_clearcoat_roughness_texture(_uv: Vec2) -> f32 {
+    0.0
+}
+
+/// Clearcoat normal texture for rocky ground (linear).
+pub fn rocky_clearcoat_normal_texture(_uv: Vec2) -> Vec3 {
+    Vec3::new(0.5, 0.5, 1.0)
+}
+
+/// Anisotropy texture for rocky ground (linear).
+pub fn rocky_anisotropy_texture(uv: Vec2) -> Vec3 {
+    let variation = crate::noise::perlin_noise(uv, ROCK_SCALE * 0.3);
+    let strength = ((variation + 1.0) / 2.0 * 0.05).clamp(0.0, 0.05);
+    Vec3::new(0.0, 0.0, strength)
+}
+
+/// Depth map / Parallax texture for rocky ground (linear).
+pub fn rocky_depth_map(uv: Vec2) -> f32 {
+    let height = crate::noise::perlin_noise(uv, ROCK_SCALE * 0.8);
+    ((height + 1.0) / 2.0 * 0.15).clamp(0.0, 0.15)
+}
+
+/// Diffuse transmission texture for rocky ground (linear).
+pub fn rocky_diffuse_transmission_texture(_uv: Vec2) -> f32 {
+    0.0
+}
+
+/// Specular transmission texture for rocky ground (linear).
+pub fn rocky_specular_transmission_texture(_uv: Vec2) -> f32 {
+    0.0
+}
+
+/// Thickness texture for rocky ground (linear).
+pub fn rocky_thickness_texture(_uv: Vec2) -> f32 {
+    0.0
+}
+
 // ========== Example implementations (uncomment to use) ==========
+
+// Example: Perlin noise-based base color.
+// pub fn base_color_texture(uv: Vec2) -> Vec4 {
+//     let noise = crate::noise::perlin_noise(uv, 5.0);
+//     let r = (noise + 1.0) / 2.0; // Map from [-1, 1] to [0, 1]
+//     Vec4::new(r, r * 0.5, 0.0, 1.0)
+// }
+
+// Example: Worley noise-based metallic-roughness.
+// pub fn metallic_roughness_texture(uv: Vec2) -> Vec2 {
+//     let noise = crate::noise::worley_noise(uv, 10.0, 30);
+//     let roughness = noise.clamp(0.0, 1.0);
+//     let metallic = (crate::noise::perlin_noise(uv, 2.0) + 1.0) / 2.0;
+//     Vec2::new(roughness, metallic) // x = roughness, y = metallic
+// }
+
+// Example: Combined noise for emissive texture.
+// pub fn emissive_texture(uv: Vec2) -> Vec3 {
+//     let noise = crate::noise::combined_noise(uv);
+//     let intensity = (noise + 1.0) / 2.0;
+//     Vec3::new(intensity * 0.1, intensity * 0.05, 0.0)
+// }==========
 
 // Example: Perlin noise-based base color.
 // pub fn base_color_texture(uv: Vec2) -> Vec4 {

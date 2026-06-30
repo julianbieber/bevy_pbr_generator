@@ -1,6 +1,16 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use glam::{Vec2, Vec3, Vec4};
 use std::path::PathBuf;
+
+/// Texture type for generation.
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+pub enum TextureType {
+    /// Water-like textures (default)
+    #[default]
+    Water,
+    /// Rocky ground textures
+    Rocky,
+}
 
 /// CLI arguments for texture generation.
 #[derive(Parser, Debug)]
@@ -13,6 +23,10 @@ pub struct Args {
     /// Output directory for the generated textures.
     #[arg(short, long, default_value = "./output")]
     pub output_dir: PathBuf,
+
+    /// Type of texture to generate.
+    #[arg(short, long, value_enum, default_value_t = TextureType::Water)]
+    pub texture_type: TextureType,
 }
 
 /// Texture value enum to support different return types from generators.
@@ -27,10 +41,9 @@ pub enum TextureValue {
 /// Texture configuration for Bevy PBR.
 /// Each generator returns its natural type (f32, Vec2, Vec3, Vec4).
 /// The pack_fn converts the generator's output to RGBA [f32; 4] based on Bevy's channel mappings.
-#[derive(Debug, Clone, Copy)]
 pub struct TextureConfig {
     pub name: &'static str,
-    pub generator: fn(Vec2) -> TextureValue,
+    pub generator: Box<dyn Fn(Vec2) -> TextureValue>,
     #[allow(dead_code)]
     pub is_srgb: bool,
     /// Pack function: converts the generator's TextureValue to RGBA [f32; 4]
@@ -41,13 +54,13 @@ pub struct TextureConfig {
 impl TextureConfig {
     pub fn new(
         name: &'static str,
-        generator: fn(Vec2) -> TextureValue,
+        generator: impl Fn(Vec2) -> TextureValue + 'static,
         is_srgb: bool,
         pack_fn: fn(TextureValue) -> [f32; 4],
     ) -> Self {
         Self {
             name,
-            generator,
+            generator: Box::new(generator),
             is_srgb,
             pack_fn,
         }
