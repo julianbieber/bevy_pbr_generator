@@ -20,12 +20,8 @@ test:
 # Check the project (build + clippy)
 check: build clippy
 
-# Run the application with default settings
-run:
-    cargo run --release
-
 # Run with custom resolution
-run-res *args:
+run *args:
     cargo run --release -- {{args}}
 
 # Format code
