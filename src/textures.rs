@@ -286,7 +286,6 @@ pub fn thickness_texture(_uv: Vec2) -> f32 {
     WATER_THICKNESS
 }
 
-
 // Example: Perlin noise-based base color.
 // pub fn base_color_texture(uv: Vec2) -> Vec4 {
 //     let noise = crate::noise::perlin_noise(uv, 5.0);
@@ -383,8 +382,7 @@ pub fn rocky_metallic_roughness_texture(uv: Vec2) -> Vec2 {
         crate::noise::perlin_noise,
     );
     let noise_factor = (noise + 1.0) / 2.0;
-    let roughness = (ROCK_BASE_ROUGHNESS
-        + (noise_factor - 0.5) * ROCK_ROUGHNESS_VARIATION * 2.0)
+    let roughness = (ROCK_BASE_ROUGHNESS + (noise_factor - 0.5) * ROCK_ROUGHNESS_VARIATION * 2.0)
         .clamp(0.75, 0.98);
     Vec2::new(roughness, ROCK_METALLIC)
 }
