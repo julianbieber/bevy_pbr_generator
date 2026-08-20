@@ -1,180 +1,235 @@
 # Bevy PBR Texture Generator
 
-A command-line tool for generating PBR (Physically Based Rendering) textures compatible with [Bevy Engine](https://bevyengine.org/).
+<!-- TODO(jb-doc): one-paragraph description of what this tool is and who it is for -->
 
-## Features
-
-- Generates 6 standard PBR textures as PNG files
-- Configurable resolution via CLI
-- Manual implementations of 5 noise algorithms for texture generation
-- Customizable per-texture functions
-- Correct channel mappings for Bevy's `StandardMaterial`
-
-## Installation
+## Running
 
 ```bash
-git clone https://github.com/julianbieber/bevy_pbr_generator.git
-cd bevy_pbr_generator
-cargo install --path .
+just run
 ```
 
-## Usage
+## Interface
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ mesh: Cube Sphere Plane Quad │ 3D │ ☐ Animate ☐ Turntable │ Preview 512  │
+│ Export 1024 │ Export PNGs                                                │
+├───────────────┬────────────────────────────────────┬─────────────────────┤
+│ MATERIALS     │                                    │ MAPS                │
+│ PARAMETERS    │          3D preview                │  10 thumbnails      │
+│               │   orbit / zoom / pan               │ CHANNEL RGB R G B A │
+│               │   procedural sky + IBL             │ SUN  elevation      │
+│               │                                    │      azimuth        │
+│               │                                    │ SEED Randomise      │
+├───────────────┴────────────────────────────────────┴─────────────────────┤
+│ <file> - <compile status> - <size> - 10 maps - <view> - regenerated <t>   │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+| Input | Action |
+|---|---|
+| Left drag in viewport | Orbit |
+| Middle drag in viewport | Pan |
+| Wheel in viewport | Zoom |
+| Wheel over left panel | Scroll parameters |
+| Click a map thumbnail | Toggle full-screen view of that map |
+| `RGB` / `R` / `G` / `B` / `A` | Channel isolation, thumbnails and full view |
+
+Preview resolution and export resolution are independent. Editing any
+`assets/materials/*.wgsl` or `assets/shaders/lib/*.wgsl` regenerates the maps
+without restarting; compile errors appear in the status bar and the previous
+textures stay on screen.
+
+## Generated Maps
+
+| File | Channels | Colour space | Bevy `StandardMaterial` fields |
+|---|---|---|---|
+| `base_color.png` | RGB = base colour, A = opacity | sRGB | `base_color_texture` |
+| `normal.png` | RGB = tangent-space normal | Linear | `normal_map_texture` |
+| `orm.png` | R = occlusion, G = roughness, B = metallic | Linear | `occlusion_texture`, `metallic_roughness_texture` |
+| `emissive.png` | RGB = emissive | sRGB | `emissive_texture` |
+| `transmission.png` | R = specular transmission, G = thickness, A = diffuse transmission | Linear | `specular_transmission_texture`, `thickness_texture`, `diffuse_transmission_texture` |
+| `specular.png` | RGB = specular tint, A = specular | sRGB RGB, linear A | `specular_tint_texture`, `specular_texture` |
+| `clearcoat.png` | R = clearcoat, G = clearcoat roughness | Linear | `clearcoat_texture`, `clearcoat_roughness_texture` |
+| `clearcoat_normal.png` | RGB = clearcoat normal | Linear | `clearcoat_normal_texture` |
+| `anisotropy.png` | RG = direction, B = strength | Linear | `anisotropy_texture` |
+| `depth.png` | R = parallax depth | Linear | `depth_map` |
+
+Exports land in `<output dir>/<material>/`.
+
+## Writing a Material
 
 ```bash
-# Generate 1024x1024 textures to ./output (default)
-bevy_pbr_generator
-
-# Custom resolution and output directory
-bevy_pbr_generator --resolution 512 --output-dir ./textures
-
-# Show help
-bevy_pbr_generator --help
+just new-material my_material
 ```
 
-### CLI Options
+A material is one WGSL file in `assets/materials/`. It declares its parameters,
+implements `surface(uv) -> Surface`, and ends with the compute entry point.
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-r, --resolution` | Texture width and height in pixels | `1024` |
-| `-o, --output-dir` | Output directory for PNG files | `./output` |
+```wgsl
+// @material My Material
 
-## Generated Textures
+#import pbr_gen::maps::{Surface, default_surface, write_surface, globals, uv_of, in_bounds, normal_from_slope, normal_epsilon}
+#import pbr_gen::noise::{set_noise_seed, perlin_noise, fbm_perlin, to_unit}
 
-| Texture | Color Space | Channel Usage | Bevy Field |
-|---------|-------------|---------------|------------|
-| `base_color_texture.png` | sRGB | RGB = color, A = 1.0 | `base_color_texture` |
-| `emissive_texture.png` | sRGB | RGB = emissive color, A = 1.0 | `emissive_texture` |
-| `metallic_roughness_texture.png` | Linear | **G = roughness**, **B = metallic**, R = 0, A = 1.0 | `metallic_roughness_texture` |
-| `diffuse_transmission_texture.png` | Linear | **A = transmission**, RGB = 1.0 | `diffuse_transmission_texture` |
-| `specular_transmission_texture.png` | Linear | **R = transmission**, GBA = 1.0 | `specular_transmission_texture` |
-| `thickness_texture.png` | Linear | **G = thickness**, RBA = 1.0 | `thickness_texture` |
+struct Params {
+    // @group Colour
+    tint: vec3<f32>,   // @ui "Tint" color srgb(0.6, 0.6, 0.6)
 
-## Customization
+    // @group Shape
+    scale: f32,        // @ui "Scale" 8.0 [1.0, 64.0]
+    octaves: i32,      // @ui "Octaves" 4 [1, 8]
+}
+@group(1) @binding(0) var<uniform> params: Params;
 
-Edit the texture generation functions in `src/textures.rs`. Each function receives normalized UV coordinates (`Vec2` in `[0.0, 1.0]`) and returns a `Vec2` for channel values.
+fn surface(uv: vec2<f32>) -> Surface {
+    var s = default_surface();
+    s.base_color = params.tint * to_unit(fbm_perlin(uv, params.scale, params.octaves, 2.0, 0.5));
+    return s;
+}
 
-### Example: Perlin Noise Base Color
-
-```rust
-use crate::noise::perlin_noise;
-
-pub fn base_color_texture(uv: Vec2) -> Vec2 {
-    let noise = perlin_noise(uv, 5.0);
-    let r = (noise + 1.0) / 2.0; // Map from [-1, 1] to [0, 1]
-    Vec2::new(r, r * 0.5)
+@compute @workgroup_size(8, 8, 1)
+fn generate(@builtin(global_invocation_id) id: vec3<u32>) {
+    if !in_bounds(id.xy) {
+        return;
+    }
+    set_noise_seed(globals.seed);
+    write_surface(id.xy, surface(uv_of(id.xy)));
 }
 ```
 
-### Example: Metallic-Roughness with Worley Noise
+Files whose name starts with `_` are skipped by the material scanner.
 
-```rust
-use crate::noise::{perlin_noise, worley_noise};
+### `@ui` Annotations
 
-pub fn metallic_roughness_texture(uv: Vec2) -> Vec2 {
-    let roughness = worley_noise(uv, 10.0, 30).clamp(0.0, 1.0);
-    let metallic = (perlin_noise(uv, 2.0) + 1.0) / 2.0;
-    Vec2::new(roughness, metallic) // x = roughness (G), y = metallic (B)
-}
-```
+One annotation per field, on the same line. Fields without one get a `0.0..1.0`
+slider.
 
-## Available Noise Functions
+| Form | Field types | Widget |
+|---|---|---|
+| `@ui <default> [<min>, <max>]` | `f32`, `i32`, `u32` | Slider |
+| `@ui <default> [<min>, <max>] step <s>` | `f32`, `i32`, `u32` | Slider with step |
+| `@ui (<x>, <y>) [<min>, <max>]` | `vec2<f32>` | One slider per component |
+| `@ui vec (<..>) [<min>, <max>]` | `vec2`/`vec3`/`vec4` | One slider per component |
+| `@ui color srgb(<r>, <g>, <b>)` | `vec3<f32>`, `vec4<f32>` | RGB colour sliders |
+| `@ui color linear(<r>, <g>, <b>)` | `vec3<f32>`, `vec4<f32>` | RGB colour sliders |
+| `@ui toggle <true\|false>` | `u32`, `i32` | Toggle switch |
+| `@ui hidden` | any | None; default is used |
+| `@ui "Label" ...` | any | Overrides the displayed name |
+| `// @group <Name>` on its own line | — | Starts a panel section |
 
-All noise functions are in `src/noise.rs`:
+Supported field types are `f32`, `i32`, `u32`, `vec2<f32>`, `vec3<f32>` and
+`vec4<f32>`. `srgb(...)` values are converted to linear before upload. The struct
+must fit in 1024 bytes.
 
-| Function | Description |
-|----------|-------------|
-| `white_noise(uv: Vec2) -> f32` | Random value per pixel |
-| `value_noise(uv: Vec2, scale: f32) -> f32` | Interpolated white noise |
-| `perlin_noise(uv: Vec2, scale: f32) -> f32` | Perlin noise |
-| `simplex_noise(uv: Vec2, scale: f32) -> f32` | Simplex noise (2D) |
-| `worley_noise(uv: Vec2, scale: f32, points: usize) -> f32` | Worley noise (F1) |
-| `fbm(uv: Vec2, scale: f32, octaves: usize, lacunarity: f32, persistence: f32, noise_fn: fn(Vec2, f32) -> f32) -> f32` | Fractional Brownian Motion |
-| `combined_noise(uv: Vec2) -> f32` | Combined noise (example) |
+File-level annotations:
 
-## Bevy Integration
+| Form | Effect |
+|---|---|
+| `// @material <Name>` | Display name in the material list |
+
+### `Surface`
+
+`default_surface()` returns neutral values. `write_surface` performs all channel
+packing and encoding.
+
+| Field | Type |
+|---|---|
+| `base_color` | `vec3<f32>` |
+| `opacity` | `f32` |
+| `normal` | `vec3<f32>` |
+| `occlusion` | `f32` |
+| `roughness` | `f32` |
+| `metallic` | `f32` |
+| `emissive` | `vec3<f32>` |
+| `specular` | `f32` |
+| `specular_tint` | `vec3<f32>` |
+| `diffuse_transmission` | `f32` |
+| `specular_transmission` | `f32` |
+| `thickness` | `f32` |
+| `clearcoat` | `f32` |
+| `clearcoat_roughness` | `f32` |
+| `clearcoat_normal` | `vec3<f32>` |
+| `anisotropy_direction` | `vec2<f32>` |
+| `anisotropy_strength` | `f32` |
+| `depth` | `f32` |
+
+### Globals
+
+| Field | Type |
+|---|---|
+| `globals.resolution` | `vec2<u32>` |
+| `globals.time` | `f32` |
+| `globals.seed` | `f32` |
+
+### Noise Library
+
+`pbr_gen::noise`. Lattice-based functions treat `scale` as their tiling period.
+Output is seamless when `scale` is a whole number.
+
+| Function | Returns |
+|---|---|
+| `set_noise_seed(seed: f32)` | — |
+| `white_noise(uv) -> f32` | `[-1, 1]` |
+| `value_noise(uv, scale) -> f32` | `[-1, 1]` |
+| `perlin_noise(uv, scale) -> f32` | `[-1, 1]` |
+| `simplex_noise(uv, scale) -> f32` | `[-1, 1]` |
+| `worley_noise(uv, scale) -> f32` | `[0, ~1.4]` |
+| `worley_edges(uv, scale) -> f32` | `[0, ~1.4]` |
+| `fbm_perlin(uv, scale, octaves, lacunarity, persistence) -> f32` | `[-1, 1]` |
+| `fbm_value(...)` / `fbm_simplex(...)` / `fbm_worley(...)` | `[-1, 1]` |
+| `ridged_perlin(...)` | `[0, 1]` |
+| `turbulence(...)` | `[0, 1]` |
+| `domain_warp(uv, scale, strength) -> vec2<f32>` | warped UV |
+| `to_unit(n: f32) -> f32` | maps `[-1, 1]` to `[0, 1]` |
+
+## Using the Output in Bevy
 
 ```rust
 StandardMaterial {
-    base_color_texture: Some(
-        asset_server.load("output/base_color.png"),
-    ),
-    emissive_texture: Some(
-        asset_server.load("output/emissive.png"),
-    ),
-    normal_map_texture: Some(
-        asset_server.load_with_settings(
-            "output/normal.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    metallic_roughness_texture: Some(
-        asset_server.load_with_settings(
-            "output/orm.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    occlusion_texture: Some(
-        asset_server.load_with_settings(
-            "output/orm.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    depth_map: Some(
-        asset_server.load_with_settings(
-            "output/depth.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    clearcoat_texture: Some(
-        asset_server.load_with_settings(
-            "output/clearcoat.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    clearcoat_normal_texture: Some(
-        asset_server.load_with_settings(
-            "output/clearcoat_normal.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    clearcoat_roughness_texture: Some(
-        asset_server.load_with_settings(
-            "output/clearcoat.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    anisotropy_texture: Some(
-        asset_server.load_with_settings(
-            "output/anisotropy.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    // transmission.png packs: R=specular_transmission, G=thickness, A=diffuse_transmission
-    diffuse_transmission_texture: Some(
-        asset_server.load_with_settings(
-            "output/transmission.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    specular_transmission_texture: Some(
-        asset_server.load_with_settings(
-            "output/transmission.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    thickness_texture: Some(
-        asset_server.load_with_settings(
-            "output/transmission.png",
-            |settings: &mut ImageLoaderSettings| settings.is_srgb = false,
-        ),
-    ),
-    specular_tint_texture: Some(
-        asset_server.load("output/specular.png"),
-    ),
-    flip_normal_map_y: true,
-    ..Default::default()
+    base_color_texture: Some(asset_server.load("output/rocky/base_color.png")),
+    normal_map_texture: Some(asset_server.load_with_settings(
+        "output/rocky/normal.png",
+        |s: &mut ImageLoaderSettings| s.is_srgb = false,
+    )),
+    occlusion_texture: Some(asset_server.load_with_settings(
+        "output/rocky/orm.png",
+        |s: &mut ImageLoaderSettings| s.is_srgb = false,
+    )),
+    metallic_roughness_texture: Some(asset_server.load_with_settings(
+        "output/rocky/orm.png",
+        |s: &mut ImageLoaderSettings| s.is_srgb = false,
+    )),
+    emissive: LinearRgba::WHITE,
+    emissive_texture: Some(asset_server.load("output/rocky/emissive.png")),
+    depth_map: Some(asset_server.load_with_settings(
+        "output/rocky/depth.png",
+        |s: &mut ImageLoaderSettings| s.is_srgb = false,
+    )),
+    ..default()
 }
 ```
+
+Cargo features required for the texture-driven fields:
+`pbr_transmission_textures`, `pbr_specular_textures`,
+`pbr_multi_layer_material_textures`, `pbr_anisotropy_texture`.
+
+Bevy multiplies each textured field by its scalar factor. A factor of zero
+disables the texture.
+
+## Layout
+
+| Path | Contents |
+|---|---|
+| `assets/materials/*.wgsl` | One file per material |
+| `assets/materials/_template.wgsl` | Scaffold used by `just new-material` |
+| `assets/shaders/lib/pbr_maps.wgsl` | `Surface`, bindings, channel packing |
+| `assets/shaders/lib/noise.wgsl` | Noise library |
+| `assets/shaders/map_view.wgsl` | Map inspector UI material |
+| `src/material/params.rs` | `@ui` parser and std140 layout |
+| `src/gpu/` | Compute pipeline, dispatch, PNG export |
+| `src/preview.rs` | Camera, meshes, lighting |
+| `src/ui/` | Feathers UI |
 
 ## License
 
