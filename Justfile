@@ -16,9 +16,22 @@ test:
 
 check: build clippy
 
-# Release build; args are the generator's own flags, e.g. `-r 2048 -t rocky`.
+# Opens the editor. Debug builds generate too slowly to drag a slider against.
 run *args:
     cargo run --release -- {{args}}
+
+# Scaffolds assets/materials/<name>.wgsl from the template, ready to edit while
+# the editor is running.
+new-material name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="assets/materials/{{name}}.wgsl"
+    if [ -e "$target" ]; then
+        echo "$target already exists" >&2
+        exit 1
+    fi
+    sed 's/@material Template/@material {{name}}/' assets/materials/_template.wgsl > "$target"
+    echo "wrote $target"
 
 fmt:
     cargo fmt
