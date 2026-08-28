@@ -14,10 +14,8 @@ bevy = { version = "0.19", features = [
     "pbr_anisotropy_texture",
     "pbr_multi_layer_material_textures",
 ] }
-clap = { version = "4.4", features = ["derive"] }
 half = "2"
 image = { version = "0.24", default-features = false, features = ["png"] }
-glam = "0.24"
 
 [dev-dependencies]
 naga_oil = "0.22"
