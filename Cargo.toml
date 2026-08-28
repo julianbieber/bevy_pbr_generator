@@ -5,6 +5,18 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-clap = { version = "4.4", features = ["derive"] }
+bevy = { version = "0.19", features = [
+    "bevy_feathers",
+    "file_watcher",
+    "png",
+    "pbr_transmission_textures",
+    "pbr_specular_textures",
+    "pbr_anisotropy_texture",
+    "pbr_multi_layer_material_textures",
+] }
+half = "2"
 image = { version = "0.24", default-features = false, features = ["png"] }
-glam = "0.24"
+
+[dev-dependencies]
+naga_oil = "0.22"
+naga = "29"
