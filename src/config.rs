@@ -49,10 +49,6 @@ pub struct TextureConfig {
     pub name: &'static str,
     /// Sampled once per pixel with UV coordinates in `[0.0, 1.0]` on both axes.
     pub generator: Box<dyn Fn(Vec2) -> TextureValue>,
-    /// Whether the image is meant to be read back as sRGB rather than linear.
-    /// Recorded for the consumer of the textures; PNG output is unaffected.
-    #[allow(dead_code)]
-    pub is_srgb: bool,
     /// Maps a sample onto RGBA. It must accept every variant `generator` can
     /// return — an unhandled variant silently yields whatever its fallback arm
     /// produces. Components outside `[0.0, 1.0]` are clamped when written.
@@ -63,13 +59,11 @@ impl TextureConfig {
     pub fn new(
         name: &'static str,
         generator: impl Fn(Vec2) -> TextureValue + 'static,
-        is_srgb: bool,
         pack_fn: fn(TextureValue) -> [f32; 4],
     ) -> Self {
         Self {
             name,
             generator: Box::new(generator),
-            is_srgb,
             pack_fn,
         }
     }

@@ -25,7 +25,6 @@ fn main() {
         TextureConfig::new(
             "base_color",
             move |uv| TextureValue::Vec4(packed::base_color(uv, texture_type)),
-            true,
             |v| match v {
                 TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
                 _ => [1.0, 1.0, 1.0, 1.0],
@@ -34,7 +33,6 @@ fn main() {
         TextureConfig::new(
             "normal",
             move |uv| TextureValue::Vec3(packed::normal(uv, texture_type)),
-            false,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
                 _ => [0.5, 0.5, 1.0, 1.0],
@@ -43,7 +41,6 @@ fn main() {
         TextureConfig::new(
             "orm",
             move |uv| TextureValue::Vec3(packed::orm(uv, texture_type)),
-            false,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
                 _ => [1.0, 0.5, 0.0, 1.0],
@@ -52,7 +49,6 @@ fn main() {
         TextureConfig::new(
             "emissive",
             move |uv| TextureValue::Vec3(packed::emissive(uv, texture_type)),
-            true,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
                 _ => [0.0, 0.0, 0.0, 1.0],
@@ -61,7 +57,6 @@ fn main() {
         TextureConfig::new(
             "transmission",
             move |uv| TextureValue::Vec4(packed::transmission(uv, texture_type)),
-            false,
             |v| match v {
                 TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
                 _ => [0.0, 0.0, 0.0, 0.0],
@@ -70,7 +65,6 @@ fn main() {
         TextureConfig::new(
             "specular",
             move |uv| TextureValue::Vec4(packed::specular(uv, texture_type)),
-            true,
             |v| match v {
                 TextureValue::Vec4(v) => [v.x, v.y, v.z, v.w],
                 _ => [1.0, 1.0, 1.0, 0.0],
@@ -79,7 +73,6 @@ fn main() {
         TextureConfig::new(
             "clearcoat",
             move |uv| TextureValue::Vec2(packed::clearcoat(uv, texture_type)),
-            false,
             |v| match v {
                 TextureValue::Vec2(v) => [v.x, v.y, 0.0, 1.0],
                 _ => [0.0, 0.0, 0.0, 1.0],
@@ -88,7 +81,6 @@ fn main() {
         TextureConfig::new(
             "clearcoat_normal",
             move |uv| TextureValue::Vec3(packed::clearcoat_normal(uv, texture_type)),
-            false,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
                 _ => [0.5, 0.5, 1.0, 1.0],
@@ -97,7 +89,6 @@ fn main() {
         TextureConfig::new(
             "anisotropy",
             move |uv| TextureValue::Vec3(packed::anisotropy(uv, texture_type)),
-            false,
             |v| match v {
                 TextureValue::Vec3(v) => [v.x, v.y, v.z, 1.0],
                 _ => [0.0, 0.0, 0.0, 1.0],
@@ -106,7 +97,6 @@ fn main() {
         TextureConfig::new(
             "depth",
             move |uv| TextureValue::F32(packed::depth(uv, texture_type)),
-            false,
             |v| match v {
                 TextureValue::F32(v) => [v, 0.0, 0.0, 1.0],
                 _ => [0.0, 0.0, 0.0, 1.0],
