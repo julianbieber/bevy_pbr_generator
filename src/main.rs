@@ -1,7 +1,4 @@
-//! Bevy PBR Texture Generator
-//!
-//! Generates PNG textures for Bevy PBR materials with configurable resolution.
-//! Users can edit the texture functions in `textures.rs` to customize generation.
+//! Entry point: turns the command line into a set of PNG texture files on disk.
 
 use std::fs;
 

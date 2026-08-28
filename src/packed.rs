@@ -1,13 +1,14 @@
-//! Packed texture generator functions.
-//! These combine individual PBR properties into optimally packed textures
-//! according to BEVY_STANDARD_MATERIAL_TEXTURE_PACKING.md.
+//! Selection of the per-material texture functions, and the packing of their
+//! outputs into the channel layout Bevy's `StandardMaterial` expects.
+//!
+//! The layout each function commits to is derived in
+//! BEVY_STANDARD_MATERIAL_TEXTURE_PACKING.md.
 
 use crate::config::TextureType;
 use crate::textures;
 use glam::Vec2;
 
-/// Base color + Opacity (sRGB)
-/// RGB = base_color, A = opacity
+/// Base colour in RGB, opacity in A. sRGB.
 pub fn base_color(uv: Vec2, texture_type: TextureType) -> glam::Vec4 {
     match texture_type {
         TextureType::Water => textures::base_color_texture(uv),
@@ -15,8 +16,8 @@ pub fn base_color(uv: Vec2, texture_type: TextureType) -> glam::Vec4 {
     }
 }
 
-/// Normal map (Linear)
-/// RGB = normal vector
+/// Tangent-space normal in RGB, each component remapped from `[-1.0, 1.0]` to
+/// `[0.0, 1.0]`. Linear.
 pub fn normal(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     match texture_type {
         TextureType::Water => textures::normal_map_texture(uv),
@@ -24,8 +25,7 @@ pub fn normal(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     }
 }
 
-/// ORM: Occlusion, Roughness, Metallic (Linear)
-/// R = occlusion, G = roughness, B = metallic
+/// Occlusion in R, roughness in G, metallic in B. Linear.
 pub fn orm(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     match texture_type {
         TextureType::Water => {
@@ -41,8 +41,7 @@ pub fn orm(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     }
 }
 
-/// Emissive (sRGB)
-/// RGB = emissive color
+/// Emissive colour in RGB. sRGB.
 pub fn emissive(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     match texture_type {
         TextureType::Water => textures::emissive_texture(uv),
@@ -50,8 +49,8 @@ pub fn emissive(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     }
 }
 
-/// Transmission (Linear)
-/// R = specular_transmission, G = thickness, A = diffuse_transmission
+/// Specular transmission in R, thickness in G, diffuse transmission in A; B is
+/// unused and always 0.0. Linear.
 pub fn transmission(uv: Vec2, texture_type: TextureType) -> glam::Vec4 {
     match texture_type {
         TextureType::Water => {
@@ -69,8 +68,7 @@ pub fn transmission(uv: Vec2, texture_type: TextureType) -> glam::Vec4 {
     }
 }
 
-/// Specular + Specular Tint (Linear for specular, sRGB for tint)
-/// RGB = specular_tint, A = specular
+/// Specular tint in RGB (sRGB), specular strength in A (linear).
 pub fn specular(uv: Vec2, texture_type: TextureType) -> glam::Vec4 {
     match texture_type {
         TextureType::Water => {
@@ -86,8 +84,7 @@ pub fn specular(uv: Vec2, texture_type: TextureType) -> glam::Vec4 {
     }
 }
 
-/// Clearcoat (Linear)
-/// R = clearcoat, G = clearcoat_roughness
+/// Clearcoat strength in R, clearcoat roughness in G. Linear.
 pub fn clearcoat(uv: Vec2, texture_type: TextureType) -> glam::Vec2 {
     match texture_type {
         TextureType::Water => {
@@ -103,8 +100,7 @@ pub fn clearcoat(uv: Vec2, texture_type: TextureType) -> glam::Vec2 {
     }
 }
 
-/// Clearcoat Normal (Linear)
-/// RGB = clearcoat normal vector
+/// Tangent-space clearcoat normal in RGB, remapped to `[0.0, 1.0]`. Linear.
 pub fn clearcoat_normal(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     match texture_type {
         TextureType::Water => textures::clearcoat_normal_texture(uv),
@@ -112,8 +108,7 @@ pub fn clearcoat_normal(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     }
 }
 
-/// Anisotropy (Linear)
-/// RG = direction, B = strength
+/// Anisotropy direction in RG, strength in B. Linear.
 pub fn anisotropy(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     match texture_type {
         TextureType::Water => textures::anisotropy_texture(uv),
@@ -121,8 +116,7 @@ pub fn anisotropy(uv: Vec2, texture_type: TextureType) -> glam::Vec3 {
     }
 }
 
-/// Depth / Parallax (Linear)
-/// R = parallax depth
+/// Parallax depth, written to R. Linear.
 pub fn depth(uv: Vec2, texture_type: TextureType) -> f32 {
     match texture_type {
         TextureType::Water => textures::depth_map(uv),

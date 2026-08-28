@@ -1,4 +1,4 @@
-//! Texture generation utilities
+//! Rasterisation: turning a texture description into an image file on disk.
 
 use crate::config::TextureConfig;
 use glam::Vec2;
@@ -6,7 +6,14 @@ use image::Rgba;
 use image::RgbaImage;
 use std::path::PathBuf;
 
-/// Generate a single texture and save it as a PNG.
+/// Samples `config`'s generator over a `resolution` x `resolution` grid of UVs
+/// spanning `[0.0, 1.0]` inclusive on both axes, and writes the packed samples
+/// to `path` as an 8-bit RGBA PNG. Channel values outside `[0.0, 1.0]` are
+/// clamped rather than wrapped.
+///
+/// `resolution` must be at least 2: at 1 the UV divisor is zero and every
+/// sample is taken at NaN. Panics if the file cannot be written, and the
+/// encoding is chosen from `path`'s extension, so it must be `.png`.
 pub fn generate_texture(config: &TextureConfig, resolution: u32, path: &PathBuf) {
     let width = resolution;
     let height = resolution;

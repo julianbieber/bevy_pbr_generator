@@ -1,17 +1,18 @@
-//! Manual implementations of noise functions for texture generation.
+//! Deterministic 2D noise primitives sampled by the texture functions.
 //!
-//! Note: These functions are not used by default. Users should edit the texture functions
-//! in `textures.rs` to use them.
+//! Every function here is a pure function of its arguments with no seeding
+//! parameter, so a given coordinate always yields the same value across runs.
 
 use glam::Vec2;
 
 #[allow(dead_code)]
-/// White noise: random value per pixel (pseudo-random based on coordinates).
+/// Uncorrelated value in `[-1.0, 1.0]` hashed from the *truncated* integer part
+/// of `uv`, so it is constant across each unit cell: callers wanting per-pixel
+/// noise must scale `uv` up first.
 #[inline]
 pub fn white_noise(uv: Vec2) -> f32 {
     let x = uv.x as i32;
     let y = uv.y as i32;
-    // Simple hash function for pseudo-randomness
     let mut hash = x
         .wrapping_mul(123456791)
         .wrapping_add(y.wrapping_mul(987654321));
@@ -22,7 +23,9 @@ pub fn white_noise(uv: Vec2) -> f32 {
 }
 
 #[allow(dead_code)]
-/// Value noise: interpolated white noise.
+/// [`white_noise`] sampled on a lattice of `scale` cells per unit of UV and
+/// bilinearly interpolated between them. Range `[-1.0, 1.0]`; the linear blend
+/// leaves visible creases along cell boundaries.
 #[inline]
 pub fn value_noise(uv: Vec2, scale: f32) -> f32 {
     let scaled_uv = uv * scale;
@@ -34,13 +37,11 @@ pub fn value_noise(uv: Vec2, scale: f32) -> f32 {
     let sx = scaled_uv.x - x0 as f32;
     let sy = scaled_uv.y - y0 as f32;
 
-    // Compute white noise at corners
     let n00 = white_noise(Vec2::new(x0 as f32, y0 as f32));
     let n01 = white_noise(Vec2::new(x0 as f32, y1 as f32));
     let n10 = white_noise(Vec2::new(x1 as f32, y0 as f32));
     let n11 = white_noise(Vec2::new(x1 as f32, y1 as f32));
 
-    // Linear interpolation
     let ix0 = n00 + sx * (n10 - n00);
     let ix1 = n01 + sx * (n11 - n01);
     ix0 + sy * (ix1 - ix0)
@@ -53,7 +54,6 @@ fn smoothstep(t: f32) -> f32 {
 }
 
 #[allow(dead_code)]
-/// Permutation table for Perlin noise.
 static PERM: [u8; 256] = [
     151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69,
     142, 8, 99, 37, 240, 21, 10, 23, 190, 6, 148, 247, 120, 234, 75, 0, 26, 197, 62, 94, 252, 219,
@@ -71,7 +71,9 @@ static PERM: [u8; 256] = [
 ];
 
 #[allow(dead_code)]
-/// Perlin noise implementation.
+/// Gradient (Perlin) noise on a lattice of `scale` cells per unit of UV,
+/// roughly in `[-1.0, 1.0]` and zero at every lattice point. Smoother than
+/// [`value_noise`] at the same scale.
 #[inline]
 pub fn perlin_noise(uv: Vec2, scale: f32) -> f32 {
     let scaled_uv = uv * scale;
@@ -83,17 +85,14 @@ pub fn perlin_noise(uv: Vec2, scale: f32) -> f32 {
     let sx = scaled_uv.x - x0 as f32;
     let sy = scaled_uv.y - y0 as f32;
 
-    // Compute fade curves
     let u = smoothstep(sx);
     let v = smoothstep(sy);
 
-    // Hash coordinates to get pseudo-random gradient vectors
     let a = p(x0, y0);
     let b = p(x1, y0);
     let c = p(x0, y1);
     let d = p(x1, y1);
 
-    // Compute dot products
     let grad = |x: f32, y: f32, a: u8| -> f32 {
         let h = a & 15;
         let u = if h < 8 { x } else { y };
@@ -129,7 +128,9 @@ fn p(x: i32, y: i32) -> u8 {
 }
 
 #[allow(dead_code)]
-/// Simplex noise implementation (2D).
+/// Simplex noise on a grid of `scale` cells per unit of UV, roughly in
+/// `[-1.0, 1.0]`. Cheaper than [`perlin_noise`] at higher scales and free of
+/// its axis-aligned directional bias.
 #[inline]
 pub fn simplex_noise(uv: Vec2, scale: f32) -> f32 {
     let scaled_uv = uv * scale;
@@ -143,31 +144,25 @@ pub fn simplex_noise(uv: Vec2, scale: f32) -> f32 {
     let x0 = scaled_uv.x - i as f32 + t;
     let y0 = scaled_uv.y - j as f32 + t;
 
-    // Integer coordinates of the simplex cell
     let (i1, j1) = if x0 > y0 { (1, 0) } else { (0, 1) };
 
-    // Offsets for the other two vertices
     let x1 = x0 - i1 as f32 + skew;
     let y1 = y0 - j1 as f32 + skew;
     let x2 = x0 - 1.0 + 2.0 * skew;
     let y2 = y0 - 1.0 + 2.0 * skew;
 
-    // Calculate hashes for the three vertices
     let h0 = hash(i, j);
     let h1 = hash(i + i1, j + j1);
     let h2 = hash(i + 1, j + 1);
 
-    // Calculate the contribution from each vertex
     let n0 = dot(grad(h0), Vec2::new(x0, y0));
     let n1 = dot(grad(h1), Vec2::new(x1, y1));
     let n2 = dot(grad(h2), Vec2::new(x2, y2));
 
-    // Calculate the falloff for each vertex
     let a0 = 0.5 - x0 * x0 - y0 * y0;
     let a1 = 0.5 - x1 * x1 - y1 * y1;
     let a2 = 0.5 - x2 * x2 - y2 * y2;
 
-    // Apply the falloff
     let mut value = 0.0;
     if a0 > 0.0 {
         value += a0.powi(4) * n0;
@@ -179,7 +174,7 @@ pub fn simplex_noise(uv: Vec2, scale: f32) -> f32 {
         value += a2.powi(4) * n2;
     }
 
-    value * 70.0 // Scale to roughly match Perlin noise range
+    value * 70.0
 }
 
 #[allow(dead_code)]
@@ -212,17 +207,19 @@ fn dot(g: Vec2, v: Vec2) -> f32 {
 }
 
 #[allow(dead_code)]
-/// Worley noise (F1 - distance to nearest point).
+/// Distance from `uv * scale` to the nearest of `points` fixed feature points,
+/// clamped above at 1.0 (F1 Worley noise). Range `[0.0, 1.0]`, smallest at the
+/// feature points. The feature points are drawn from a fixed seed and are not
+/// tiled per cell, so they all live near the unit square: away from it the
+/// result saturates at 1.0.
 #[inline]
 pub fn worley_noise(uv: Vec2, scale: f32, points: usize) -> f32 {
     let scaled_uv = uv * scale;
     let mut min_dist = 1.0;
 
-    // Use a fixed seed for reproducibility
     let seed: i32 = 42;
 
     for i in 0..points {
-        // Generate pseudo-random point
         let mut hash = seed.wrapping_add(i as i32).wrapping_mul(123456791);
         hash = (hash ^ (hash >> 16)).wrapping_mul(0x85ebca6b_u32 as i32);
         hash = (hash ^ (hash >> 13)).wrapping_mul(0xc2b2ae35_u32 as i32);
@@ -244,7 +241,10 @@ pub fn worley_noise(uv: Vec2, scale: f32, points: usize) -> f32 {
 }
 
 #[allow(dead_code)]
-/// Fractional Brownian Motion (fBm) for multi-octave noise.
+/// Sums `octaves` samples of `noise_fn`, each octave `lacunarity` times finer
+/// and `persistence` times weaker than the last, starting at `scale`. With
+/// `persistence` below 1.0 the result stays within roughly `1 / (1 -
+/// persistence)` times the range of `noise_fn`; it is not renormalised.
 #[inline]
 pub fn fbm(
     uv: Vec2,
@@ -268,7 +268,8 @@ pub fn fbm(
 }
 
 #[allow(dead_code)]
-/// Combined noise function for testing.
+/// The unweighted mean of all four noise functions at a fixed scale of 5.0,
+/// as a ready-made starting point for texture experiments.
 #[inline]
 pub fn combined_noise(uv: Vec2) -> f32 {
     let perlin = perlin_noise(uv, 5.0);

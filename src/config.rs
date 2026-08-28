@@ -1,8 +1,10 @@
+//! The command-line surface, and the description of a single texture to be generated.
+
 use clap::{Parser, ValueEnum};
 use glam::{Vec2, Vec3, Vec4};
 use std::path::PathBuf;
 
-/// Texture type for generation.
+/// Selects which family of texture functions every generator samples from.
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
 pub enum TextureType {
     /// Water-like textures (default)
@@ -29,7 +31,9 @@ pub struct Args {
     pub texture_type: TextureType,
 }
 
-/// Texture value enum to support different return types from generators.
+/// A sample produced by a texture generator. The variant carries the property's
+/// natural arity; it is the matching `pack_fn` that decides which RGBA channels
+/// those components land in.
 #[derive(Debug, Clone, Copy)]
 pub enum TextureValue {
     F32(f32),
@@ -38,16 +42,20 @@ pub enum TextureValue {
     Vec4(Vec4),
 }
 
-/// Texture configuration for Bevy PBR.
-/// Each generator returns its natural type (f32, Vec2, Vec3, Vec4).
-/// The pack_fn converts the generator's output to RGBA [f32; 4] based on Bevy's channel mappings.
+/// Everything needed to produce one output image: what to call it, what to
+/// sample per pixel, and how that sample becomes RGBA.
 pub struct TextureConfig {
+    /// Stem of the output file name; the `.png` extension is added by the caller.
     pub name: &'static str,
+    /// Sampled once per pixel with UV coordinates in `[0.0, 1.0]` on both axes.
     pub generator: Box<dyn Fn(Vec2) -> TextureValue>,
+    /// Whether the image is meant to be read back as sRGB rather than linear.
+    /// Recorded for the consumer of the textures; PNG output is unaffected.
     #[allow(dead_code)]
     pub is_srgb: bool,
-    /// Pack function: converts the generator's TextureValue to RGBA [f32; 4]
-    /// based on Bevy's channel mappings for this specific texture.
+    /// Maps a sample onto RGBA. It must accept every variant `generator` can
+    /// return — an unhandled variant silently yields whatever its fallback arm
+    /// produces. Components outside `[0.0, 1.0]` are clamped when written.
     pub pack_fn: fn(TextureValue) -> [f32; 4],
 }
 

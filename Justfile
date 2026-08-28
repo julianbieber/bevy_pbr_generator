@@ -1,42 +1,35 @@
-# Justfile for bevy_pbr_generator
-# Run with: just <command>
+# Every cargo invocation this project is developed with, so none of them have to
+# be remembered as flags.
 
-# Default recipe - build and check
 default:
     @just --list
 
-# Build the project
 build:
     cargo build
 
-# Run clippy linter
+# Fails on any warning, so this is the gate a change has to pass.
 clippy:
     cargo clippy --all-targets --all-features -- -D warnings
 
-# Run tests (if any)
 test:
     cargo test
 
-# Check the project (build + clippy)
 check: build clippy
 
-# Run with custom resolution
+# Release build; args are the generator's own flags, e.g. `-r 2048 -t rocky`.
 run *args:
     cargo run --release -- {{args}}
 
-# Format code
 fmt:
     cargo fmt
 
-# Clean build artifacts
 clean:
     cargo clean
 
-# Generate documentation
+# Opens the rendered docs in a browser.
 docs:
     cargo doc --open
 
-# Update dependencies
+# Rewrites Cargo.lock.
 update:
     cargo update
-
