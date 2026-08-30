@@ -38,13 +38,23 @@ impl PreviewShape {
         }
     }
 
+    /// The mesh this shape is previewed on, carrying mikktspace tangents.
+    ///
+    /// Bevy reads the normal, clearcoat normal, anisotropy and depth maps only
+    /// on a mesh with tangents, so a shape that failed to generate them is
+    /// previewed with those four maps silently inert; the failure is warned
+    /// about rather than returned, because there is still a mesh to draw.
     pub fn mesh(self) -> Mesh {
-        match self {
+        let mut mesh: Mesh = match self {
             Self::Cube => Cuboid::new(1.0, 1.0, 1.0).into(),
             Self::Sphere => Sphere::new(0.7).mesh().uv(48, 24),
             Self::Plane => Plane3d::default().mesh().size(1.6, 1.6).into(),
             Self::Quad => Rectangle::new(1.4, 1.4).into(),
+        };
+        if let Err(error) = mesh.generate_tangents() {
+            warn!("no tangents on the {} preview mesh: {error}", self.label());
         }
+        mesh
     }
 }
 
