@@ -1,10 +1,11 @@
 //! The two cameras the editor renders with, and the orbit control over the 3D
 //! one.
 
-use bevy::camera::ClearColorConfig;
+use bevy::camera::{ClearColorConfig, Exposure, Hdr};
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::light::atmosphere::ScatteringMedium;
-use bevy::light::{Atmosphere, AtmosphereEnvironmentMapLight};
+use bevy::light::{Atmosphere, AtmosphereEnvironmentMapLight, GlobalAmbientLight};
+use bevy::pbr::AtmosphereSettings;
 use bevy::prelude::*;
 
 use crate::app::{EditorSettings, PreviewShape};
@@ -57,13 +58,38 @@ impl OrbitCamera {
 #[derive(Component, Debug)]
 pub struct PreviewCamera;
 
-/// Spawns the preview camera behind the UI camera.
+/// Spawns the preview camera behind the UI camera, and the sky that lights it.
 ///
 /// The 3D camera covers the whole window and draws first; the UI camera draws
 /// over it without clearing, so the opaque panels hide the 3D image and the
 /// transparent centre panel lets it through. Confining the 3D camera to a
 /// viewport rect instead renders nothing at all in that rect.
-pub fn spawn_cameras(mut commands: Commands, mut media: ResMut<Assets<ScatteringMedium>>) {
+///
+/// The atmosphere is a second entity rather than a component on the camera: it
+/// is the planet, and its `GlobalTransform` is the planet's centre, so on the
+/// camera it would be dragged to wherever the orbit put the viewer. The camera
+/// carries `AtmosphereSettings`, which is what opts a view into the sky and into
+/// the environment map the sky is derived into, and an exposure raised to suit
+/// the raw sunlight the sun is lit at.
+///
+/// Both cameras are `Hdr`: two cameras on one window that disagree about it are
+/// given separate main textures, and the window then presents the UI camera's,
+/// with the 3D image nowhere in it. The 3D camera takes `Hdr` from
+/// `AtmosphereSettings`, which requires it, so the UI camera has to be told.
+///
+/// Also zeroes the ambient light, whose flat term would otherwise stand in for
+/// the sky and lift every map's darks.
+pub fn spawn_cameras(
+    mut commands: Commands,
+    mut media: ResMut<Assets<ScatteringMedium>>,
+    mut ambient: ResMut<GlobalAmbientLight>,
+) {
+    *ambient = GlobalAmbientLight::NONE;
+
+    commands.spawn(Atmosphere::earth(
+        media.add(ScatteringMedium::earth(256, 128)),
+    ));
+
     let orbit = OrbitCamera::default();
     commands.spawn((
         Camera3d::default(),
@@ -74,12 +100,14 @@ pub fn spawn_cameras(mut commands: Commands, mut media: ResMut<Assets<Scattering
         orbit.transform(),
         orbit,
         PreviewCamera,
-        Atmosphere::earth(media.add(ScatteringMedium::earth(256, 128))),
+        AtmosphereSettings::default(),
         AtmosphereEnvironmentMapLight::default(),
+        Exposure { ev100: 13.0 },
     ));
 
     commands.spawn((
         Camera2d,
+        Hdr,
         Camera {
             order: 1,
             clear_color: ClearColorConfig::None,

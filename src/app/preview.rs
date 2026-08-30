@@ -1,6 +1,7 @@
 //! The previewed mesh, the light on it, and the binding of the generated maps
 //! to the material it is drawn with.
 
+use bevy::light::light_consts::lux;
 use bevy::light::AtmosphereEnvironmentMapLight;
 use bevy::prelude::*;
 
@@ -31,7 +32,7 @@ pub fn spawn_preview(
 
     commands.spawn((
         DirectionalLight {
-            illuminance: 10_000.0,
+            illuminance: lux::RAW_SUNLIGHT,
             shadow_maps_enabled: true,
             ..default()
         },
