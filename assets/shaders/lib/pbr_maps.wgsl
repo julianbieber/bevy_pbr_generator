@@ -27,14 +27,15 @@ struct Globals {
 // Every PBR property at one point on the surface, in its natural range and
 // before any channel packing.
 //
-// `normal` and `clearcoat_normal` are tangent-space vectors in [-1, 1] with +X
-// right, +Y up and +Z out of the surface; `write_surface` applies the remap to
-// [0, 1] and the green flip Bevy's OpenGL convention expects, so a material must
-// not pre-encode them. `anisotropy_direction` is likewise a raw direction in
-// [-1, 1], and must never be the zero vector: Bevy normalises it, so a zero
-// direction is a NaN that blackens every lit fragment. `anisotropy_strength` is
-// what turns anisotropy off. Everything else is in [0, 1] except `emissive`,
-// which is unbounded above.
+// `normal` and `clearcoat_normal` are tangent-space vectors in [-1, 1] against
+// the frame mikktspace hands the fragment shader: +X along +u, +Y along +v and
+// +Z out of the surface, which is the frame a height field's
+// `(-dh/du, -dh/dv, 1)` is already expressed in. `write_surface` applies the
+// remap to [0, 1] and nothing else, so a material must not pre-encode them.
+// `anisotropy_direction` is likewise a raw direction in [-1, 1], and must never
+// be the zero vector: Bevy normalises it, so a zero direction is a NaN that
+// blackens every lit fragment. `anisotropy_strength` is what turns anisotropy
+// off. Everything else is in [0, 1] except `emissive`, which is unbounded above.
 struct Surface {
     base_color: vec3<f32>,
     opacity: f32,
@@ -84,8 +85,7 @@ fn default_surface() -> Surface {
 }
 
 fn encode_normal(n: vec3<f32>) -> vec3<f32> {
-    let unit = normalize(n);
-    return vec3<f32>(unit.x * 0.5 + 0.5, -unit.y * 0.5 + 0.5, unit.z * 0.5 + 0.5);
+    return normalize(n) * 0.5 + vec3<f32>(0.5);
 }
 
 // Packs `s` into the ten storage textures at `coord`, applying the normal
