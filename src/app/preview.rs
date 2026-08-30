@@ -43,14 +43,21 @@ pub fn spawn_preview(
 
 /// The material the maps are bound into.
 ///
-/// The three transmission factors are set to 1.0 rather than left at their
-/// default of 0.0: Bevy multiplies each factor by its texture, so a factor of
-/// zero would make the transmission maps invisible in the preview no matter what
-/// the material wrote.
+/// Every factor a generated map is multiplied by is set to its neutral value
+/// rather than left at its `StandardMaterial` default, so that the map alone
+/// decides the result. A factor left at zero — clearcoat, anisotropy and the
+/// transmissions all default to it, and emissive to black — would multiply its
+/// map away whatever the material wrote; `clearcoat` and `anisotropy_strength`
+/// go further and key whether their shader path is compiled in at all.
 fn preview_material() -> StandardMaterial {
     StandardMaterial {
+        emissive: LinearRgba::WHITE,
         perceptual_roughness: 1.0,
         metallic: 1.0,
+        reflectance: 1.0,
+        clearcoat: 1.0,
+        clearcoat_perceptual_roughness: 1.0,
+        anisotropy_strength: 1.0,
         specular_transmission: 1.0,
         diffuse_transmission: 1.0,
         thickness: 1.0,
