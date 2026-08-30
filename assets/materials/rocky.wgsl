@@ -86,7 +86,6 @@ fn surface(uv: vec2<f32>) -> Surface {
     s.specular_tint = params.specular_tint;
     s.specular = params.specular;
 
-    s.anisotropy_direction = vec2<f32>(0.0, 0.0);
     s.anisotropy_strength = clamp(
         (perlin_noise(uv, params.rock_scale * 0.3) + 1.0) * 0.5 * params.anisotropy_strength,
         0.0,

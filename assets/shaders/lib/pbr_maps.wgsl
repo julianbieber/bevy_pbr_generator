@@ -31,8 +31,10 @@ struct Globals {
 // right, +Y up and +Z out of the surface; `write_surface` applies the remap to
 // [0, 1] and the green flip Bevy's OpenGL convention expects, so a material must
 // not pre-encode them. `anisotropy_direction` is likewise a raw direction in
-// [-1, 1]. Everything else is in [0, 1] except `emissive`, which is unbounded
-// above.
+// [-1, 1], and must never be the zero vector: Bevy normalises it, so a zero
+// direction is a NaN that blackens every lit fragment. `anisotropy_strength` is
+// what turns anisotropy off. Everything else is in [0, 1] except `emissive`,
+// which is unbounded above.
 struct Surface {
     base_color: vec3<f32>,
     opacity: f32,
@@ -75,7 +77,7 @@ fn default_surface() -> Surface {
     s.clearcoat = 0.0;
     s.clearcoat_roughness = 0.0;
     s.clearcoat_normal = vec3<f32>(0.0, 0.0, 1.0);
-    s.anisotropy_direction = vec2<f32>(0.0, 0.0);
+    s.anisotropy_direction = vec2<f32>(1.0, 0.0);
     s.anisotropy_strength = 0.0;
     s.depth = 0.0;
     return s;
