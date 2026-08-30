@@ -25,6 +25,7 @@ struct Params {
     specular: f32,              // @ui 0.05 [0.0, 1.0]
     // @group Relief
     base_occlusion: f32,        // @ui "Occlusion" 0.60 [0.0, 1.0]
+    relief_height: f32,         // @ui "Relief" 0.03 [0.0, 0.15]
     depth_scale: f32,           // @ui "Parallax depth" 0.15 [0.0, 0.5]
     anisotropy_strength: f32,   // @ui "Anisotropy" 0.05 [0.0, 1.0]
 }
@@ -33,10 +34,11 @@ struct Params {
 const NORMAL_EPSILON: f32 = 1.0 / 512.0;
 
 fn height(uv: vec2<f32>) -> f32 {
-    return perlin_noise(uv, params.rock_scale * 0.6) * 0.5
+    let h = perlin_noise(uv, params.rock_scale * 0.6) * 0.5
         + perlin_noise(uv, params.rock_scale * 1.2) * 0.3
         + perlin_noise(uv, params.detail_scale) * 0.15
         + perlin_noise(uv, params.grain_scale) * 0.05;
+    return h * params.relief_height;
 }
 
 fn surface(uv: vec2<f32>) -> Surface {
@@ -86,7 +88,6 @@ fn surface(uv: vec2<f32>) -> Surface {
     s.specular_tint = params.specular_tint;
     s.specular = params.specular;
 
-    s.anisotropy_direction = vec2<f32>(0.0, 0.0);
     s.anisotropy_strength = clamp(
         (perlin_noise(uv, params.rock_scale * 0.3) + 1.0) * 0.5 * params.anisotropy_strength,
         0.0,
