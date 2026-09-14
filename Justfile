@@ -20,6 +20,10 @@ check: build clippy
 run *args:
     cargo run --release -- {{args}}
 
+# Combines material export folders into one image per map plus atlas.json.
+combine *args:
+    cargo run --release --bin combine -- {{args}}
+
 # Scaffolds assets/materials/<name>.wgsl from the template, ready to edit while
 # the editor is running.
 new-material name:
