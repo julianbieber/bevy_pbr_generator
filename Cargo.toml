@@ -3,6 +3,7 @@ name = "bevy_pbr_generator"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+default-run = "bevy_pbr_generator"
 
 [dependencies]
 bevy = { version = "0.19", features = [

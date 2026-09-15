@@ -11,6 +11,7 @@ TODO(jb-doc): prose.
 ```bash
 just run                    # opens the editor
 just new-material slate     # scaffolds assets/materials/slate.wgsl
+just combine output/water output/rocky   # packs exports into output/combined
 just check                  # build + clippy, the gate a change has to pass
 just test
 ```
@@ -109,6 +110,44 @@ The export button generates a second map set at the export resolution, reads it
 back, and writes `<output>/<material>/<map>.png`. Preview and export resolutions
 are independent, so the preview can stay cheap while parameters are dialled in.
 
+## Combining materials
+
+`just combine [-o <dir>] <material folder>...` packs several exported materials
+into one image per map, so a single mesh can give each region its own material
+by UV. The output defaults to `output/combined/` and holds the same ten
+`<map>.png` names as an export, plus `atlas.json`.
+
+Materials are placed left to right in the order given, each in a square cell the
+size of the largest input map; smaller maps are resized up with Lanczos3. If the
+row would be wider than 8192px it becomes a grid of as many columns as fit, and
+a combine that would need more than 8192px of height is refused. Pixels are
+copied without colour-space conversion, so each combined map keeps the encoding
+its export had.
+
+`atlas.json` names each material after its folder:
+
+```json
+{
+  "columns": 2, "rows": 1, "cell_size": 2048, "width": 4096, "height": 2048,
+  "materials": [
+    { "name": "water", "u_min": 0, "u_max": 0.5, "v_min": 0, "v_max": 1 },
+    { "name": "rocky", "u_min": 0.5, "u_max": 1, "v_min": 0, "v_max": 1 }
+  ]
+}
+```
+
+`v = 0` is the top edge. The same folders in the same order always produce the
+same regions; adding a material, or changing the largest resolution, moves them.
+
+Cells have no padding. Filtering and mipmaps blend neighbouring materials at a
+shared edge, and empty grid cells are transparent black, so keeping UVs clear of
+region borders is the consumer's job.
+
+A folder missing a map, a map that is not square 8-bit RGBA, two folders with
+the same name, or `-o` pointing at one of the inputs stops the combine before
+anything is written; a failure while writing leaves the output directory as it
+was.
+
 ## Layout
 
 | Path | Role |
@@ -122,6 +161,7 @@ are independent, so the preview can stay cheap while parameters are dialled in.
 | `src/gpu/pipeline.rs` | per-material compute pipeline and bind groups |
 | `src/gpu/dispatch.rs` | generation-gated dispatch, pipeline status |
 | `src/gpu/export.rs` | readback and PNG encode |
+| `src/bin/combine/` | the `combine` CLI: layout, compose, manifest |
 | `src/app/` | camera, preview mesh, sun |
 | `src/ui/` | the editor shell and the data-driven parameter panel |
 
