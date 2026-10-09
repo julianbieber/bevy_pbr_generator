@@ -6,7 +6,7 @@ license = "MIT"
 default-run = "bevy_pbr_generator"
 
 [dependencies]
-bevy = { version = "0.19", features = [
+bevy = { version = "0.20", features = [
     "bevy_feathers",
     "file_watcher",
     "png",
