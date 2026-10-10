@@ -24,17 +24,17 @@ run *args:
 combine *args:
     cargo run --release --bin combine -- {{args}}
 
-# Scaffolds assets/materials/<name>.wgsl from the template, ready to edit while
+# Scaffolds assets/materials/<name>.wesl from the template, ready to edit while
 # the editor is running.
 new-material name:
     #!/usr/bin/env bash
     set -euo pipefail
-    target="assets/materials/{{name}}.wgsl"
+    target="assets/materials/{{name}}.wesl"
     if [ -e "$target" ]; then
         echo "$target already exists" >&2
         exit 1
     fi
-    sed 's/@material Template/@material {{name}}/' assets/materials/_template.wgsl > "$target"
+    sed 's/@material Template/@material {{name}}/' assets/materials/_template.wesl > "$target"
     echo "wrote $target"
 
 fmt:

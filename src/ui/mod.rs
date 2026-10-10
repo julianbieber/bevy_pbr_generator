@@ -4,9 +4,15 @@
 pub mod map_view;
 pub mod params_panel;
 
-#[allow(deprecated)]
-use bevy::feathers::controls::{button_bundle, ButtonBundleProps, ButtonVariant};
+use bevy::feathers::constants::size;
+use bevy::feathers::controls::ButtonVariant;
+use bevy::feathers::focus::FocusIndicator;
+use bevy::feathers::font_styles::InheritableFont;
 use bevy::feathers::rounded_corners::RoundedCorners;
+use bevy::feathers::theme::{InheritableThemeTextColor, ThemeBackgroundColor};
+use bevy::feathers::tokens;
+use bevy::input_focus::tab_navigation::TabIndex;
+use bevy::picking::cursor::EntityCursor;
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::ui_render::ui_material::MaterialNode;
@@ -14,6 +20,7 @@ use bevy::ui_widgets::{
     slider_self_update, Activate, Slider, SliderOrientation, SliderRange, SliderValue, TrackClick,
     ValueChange,
 };
+use bevy::window::SystemCursorIcon;
 
 use crate::app::{EditorSettings, PreviewShape, SunAngles, RESOLUTIONS};
 use crate::gpu::export::ExportJob;
@@ -40,27 +47,37 @@ pub struct StatusText;
 #[derive(Component, Debug)]
 pub struct MaterialButton(pub usize);
 
+/// Activating it sets the preview shape to the wrapped value.
 #[derive(Component, Debug)]
 pub struct ShapeButton(pub PreviewShape);
 
+/// Activating it sets the displayed channel to the wrapped value.
 #[derive(Component, Debug)]
 pub struct ChannelButton(pub Channel);
 
+/// Activating it sets the preview resolution to the wrapped value, reallocates
+/// the preview maps at that size and regenerates them.
 #[derive(Component, Debug)]
 pub struct PreviewResButton(pub u32);
 
+/// Activating it sets the export resolution to the wrapped value.
 #[derive(Component, Debug)]
 pub struct ExportResButton(pub u32);
 
+/// Activating it requests an export of the current maps.
 #[derive(Component, Debug)]
 pub struct ExportButton;
 
+/// Activating it toggles animation.
 #[derive(Component, Debug)]
 pub struct AnimateButton;
 
+/// Activating it toggles the turntable.
 #[derive(Component, Debug)]
 pub struct TurntableButton;
 
+/// Activating it shows the wrapped map full-bleed over the viewport, or clears
+/// it when that map is already shown.
 #[derive(Component, Debug)]
 pub struct MapThumbnail(pub MapKind);
 
@@ -79,6 +96,8 @@ pub struct SelectedMap(pub Option<MapKind>);
 #[derive(Component, Debug)]
 pub struct FullMapView;
 
+/// Spawns the editor panels at startup and keeps them in step with the
+/// generator state.
 pub struct EditorUiPlugin;
 
 impl Plugin for EditorUiPlugin {
@@ -121,7 +140,8 @@ fn heading(text: impl Into<String>) -> impl Bundle {
     )
 }
 
-#[allow(deprecated)]
+/// A labelled button; `marker` is added to the same entity so the activation
+/// observers can tell which control was pressed.
 pub fn small_button(text: &str, marker: impl Bundle) -> impl Bundle {
     (
         Node {
@@ -130,14 +150,29 @@ pub fn small_button(text: &str, marker: impl Bundle) -> impl Bundle {
             ..default()
         },
         children![(
-            button_bundle(
-                ButtonBundleProps {
-                    variant: ButtonVariant::Normal,
-                    corners: RoundedCorners::All,
-                },
-                (),
-                bevy::ecs::spawn::Spawn(label(text.to_string())),
-            ),
+            Node {
+                height: size::ROW_HEIGHT,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                padding: UiRect::horizontal(px(8)),
+                flex_grow: 1.0,
+                border_radius: RoundedCorners::All.to_border_radius(4.0),
+                ..default()
+            },
+            bevy::ui_widgets::Button,
+            ButtonVariant::Normal,
+            Hovered::default(),
+            EntityCursor::System(SystemCursorIcon::Pointer),
+            TabIndex(0),
+            FocusIndicator,
+            ThemeBackgroundColor(tokens::BUTTON_BG),
+            InheritableThemeTextColor(tokens::BUTTON_TEXT),
+            InheritableFont {
+                font_size: size::MEDIUM_FONT,
+                weight: FontWeight::NORMAL,
+                ..default()
+            },
+            children![label(text.to_string())],
             marker,
         )],
     )
@@ -204,7 +239,6 @@ pub fn labelled_slider(
     )
 }
 
-/// Keeps each slider's fill bar in step with its value.
 fn update_slider_fill(
     sliders: Query<(&SliderValue, &SliderRange, &Children), Changed<SliderValue>>,
     mut fills: Query<&mut Node, With<SliderFill>>,
@@ -303,7 +337,6 @@ fn spawn_ui(
         .id();
     commands.entity(root).add_child(main);
 
-    // Left panel: the material list and the data-driven parameter panel.
     let left = commands
         .spawn((
             Node {
@@ -336,8 +369,6 @@ fn spawn_ui(
         ));
     });
 
-    // Centre: the rect the 3D camera renders into, with the full-bleed map view
-    // stacked over it.
     let viewport = commands
         .spawn((
             Node {
@@ -365,7 +396,6 @@ fn spawn_ui(
         ));
     });
 
-    // Right panel: the map thumbnails, the channel selector and the sun.
     let right = commands
         .spawn((
             Node {
@@ -411,7 +441,7 @@ fn spawn_ui(
                             },
                             MaterialNode(materials.add(MapViewMaterial::new(handle, *channel))),
                             MapThumbnail(*kind),
-                            Button,
+                            bevy::ui_widgets::Button,
                         ),
                         label(kind.label().to_string()),
                     ],

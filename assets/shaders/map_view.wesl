@@ -1,6 +1,6 @@
 // Draws one generated map into a UI node, masked to a single channel.
 
-#import bevy_ui::ui_vertex_output::UiVertexOutput
+import bevy_ui_render::ui_vertex_output::UiVertexOutput;
 
 @group(1) @binding(0) var<uniform> settings: vec4<f32>;
 @group(1) @binding(1) var map_texture: texture_2d<f32>;

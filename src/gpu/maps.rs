@@ -119,7 +119,7 @@ mod tests {
     use super::*;
 
     // Group 0 binds the maps by position, so the order of `ALL` is part of the
-    // shader contract in `pbr_maps.wgsl` and must not drift.
+    // shader contract in `pbr_maps.wesl` and must not drift.
     #[test]
     fn map_order_matches_the_binding_order() {
         assert_eq!(MapKind::ALL.len(), MAP_COUNT);

@@ -3,8 +3,6 @@
 // Every function is a pure function of its arguments with no seeding parameter,
 // so a given coordinate yields the same value across dispatches and across runs.
 
-#define_import_path pbr_gen::noise
-
 var<private> PERM: array<u32, 256> = array<u32, 256>(
     151u, 160u, 137u,  91u,  90u,  15u, 131u,  13u, 201u,  95u,  96u,  53u, 194u, 233u,   7u, 225u,
     140u,  36u, 103u,  30u,  69u, 142u,   8u,  99u,  37u, 240u,  21u,  10u,  23u, 190u,   6u, 148u,

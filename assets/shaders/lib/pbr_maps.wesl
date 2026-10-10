@@ -4,8 +4,6 @@
 // The channel layout committed to here is derived in
 // BEVY_STANDARD_MATERIAL_TEXTURE_PACKING.md.
 
-#define_import_path pbr_gen::maps
-
 struct Globals {
     resolution: vec2<u32>,
     time: f32,
