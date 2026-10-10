@@ -66,10 +66,12 @@ pub struct MaterialCatalog {
 }
 
 impl MaterialCatalog {
+    /// `None` when `active` is out of range of `materials`, as with an empty catalog.
     pub fn active(&self) -> Option<&MaterialSpec> {
         self.materials.get(self.active)
     }
 
+    /// `None` when `active` is out of range of `materials`, as with an empty catalog.
     pub fn active_mut(&mut self) -> Option<&mut MaterialSpec> {
         self.materials.get_mut(self.active)
     }
@@ -96,12 +98,12 @@ pub fn declared_name(source: &str, fallback: &str) -> String {
 /// Whether a directory entry is a material the editor should list.
 ///
 /// Files whose name begins with `_` are skipped, which is what keeps
-/// `_template.wgsl` out of the material list.
+/// `_template.wesl` out of the material list.
 pub fn is_material_file(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return false;
     };
-    path.extension().and_then(|e| e.to_str()) == Some("wgsl") && !name.starts_with('_')
+    path.extension().and_then(|e| e.to_str()) == Some("wesl") && !name.starts_with('_')
 }
 
 /// Reads every material under `<asset_root>/materials`, in name order.
@@ -130,7 +132,7 @@ pub fn scan_materials(asset_root: &Path, asset_server: &AssetServer) -> Vec<Mate
                 .and_then(|s| s.to_str())
                 .unwrap_or("material")
                 .to_string();
-            let asset_path = format!("{MATERIALS_DIR}/{stem}.wgsl");
+            let asset_path = format!("{MATERIALS_DIR}/{stem}.wesl");
             let source = std::fs::read_to_string(&disk_path).unwrap_or_default();
 
             let (layout, error) = match parse_params(&source) {
@@ -192,9 +194,9 @@ mod tests {
     // material list, so it has to hold for exactly the files it should.
     #[test]
     fn underscore_prefixed_files_are_skipped() {
-        assert!(is_material_file(Path::new("assets/materials/water.wgsl")));
+        assert!(is_material_file(Path::new("assets/materials/water.wesl")));
         assert!(!is_material_file(Path::new(
-            "assets/materials/_template.wgsl"
+            "assets/materials/_template.wesl"
         )));
         assert!(!is_material_file(Path::new("assets/materials/notes.txt")));
     }

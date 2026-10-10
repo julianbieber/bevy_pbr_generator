@@ -21,7 +21,7 @@ pub const WORKGROUP_SIZE: u32 = 8;
 
 /// Strong handles to the shader libraries every material imports.
 ///
-/// Held for the life of the app because `#import` resolves against loaded
+/// Held for the life of the app because `import` resolves against loaded
 /// assets: without a live handle the import fails with "Shader import not yet
 /// available" and no material ever compiles.
 #[derive(Resource, Debug)]
@@ -38,6 +38,7 @@ pub struct ShaderLibrary {
 pub struct Generation(pub u64);
 
 impl Generation {
+    /// Wraps at `u64::MAX` instead of panicking.
     pub fn bump(&mut self) {
         self.0 = self.0.wrapping_add(1);
     }
@@ -55,6 +56,7 @@ pub struct PreviewMaps {
 /// A request with no `shader`, or whose `images` are not all resident, is
 /// skipped rather than dispatched.
 #[derive(Resource, Debug, Clone, Default, ExtractResource)]
+#[extract_app(RenderApp)]
 pub struct GenerateRequest {
     pub generation: u64,
     pub shader: Option<Handle<Shader>>,
@@ -68,6 +70,7 @@ pub struct GenerateRequest {
 /// A pending export dispatch, at the export resolution and into its own map
 /// set. Empty whenever no export is in flight.
 #[derive(Resource, Debug, Clone, Default, ExtractResource)]
+#[extract_app(RenderApp)]
 pub struct ExportRequest(pub GenerateRequest);
 
 /// Group 0's uniform, identical for every material.
@@ -122,8 +125,8 @@ impl Plugin for GpuPlugin {
 fn load_shader_library(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(ShaderLibrary {
         handles: vec![
-            asset_server.load("shaders/lib/noise.wgsl"),
-            asset_server.load("shaders/lib/pbr_maps.wgsl"),
+            asset_server.load("shaders/lib/noise.wesl"),
+            asset_server.load("shaders/lib/pbr_maps.wesl"),
         ],
     });
 }

@@ -1,8 +1,8 @@
 // @material Rocky
 // @author bevy_pbr_generator
 
-#import pbr_gen::maps::{Surface, default_surface, write_surface, globals}
-#import pbr_gen::noise::{perlin_noise, simplex_noise, fbm_perlin}
+import package::shaders::lib::pbr_maps::{Surface, default_surface, write_surface, globals};
+import package::shaders::lib::noise::{perlin_noise, simplex_noise, fbm_perlin};
 
 struct Params {
     // @group Colour

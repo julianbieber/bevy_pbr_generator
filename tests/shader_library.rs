@@ -1,50 +1,51 @@
-//! Compose-time checks over the WGSL shader library and the shipped materials.
+//! Compose-time checks over the WESL shader library and the shipped materials.
 
 use bevy_pbr_generator::material::params::{parse_params, PARAMS_BUFFER_SIZE};
-use naga_oil::compose::{
-    ComposableModuleDescriptor, Composer, NagaModuleDescriptor, ShaderLanguage, ShaderType,
-};
+use wesl::resolver::FileResolver;
+use wesl::syntax::ModulePath;
+use wesl::{CompileOptions, Compiler};
 
 const LIBRARIES: [&str; 2] = [
-    "assets/shaders/lib/pbr_maps.wgsl",
-    "assets/shaders/lib/noise.wgsl",
+    "package::shaders::lib::pbr_maps",
+    "package::shaders::lib::noise",
 ];
 
-fn composer_with_libraries() -> Result<Composer, String> {
-    let mut composer = Composer::default();
-    for path in LIBRARIES {
-        let source = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-        composer
-            .add_composable_module(ComposableModuleDescriptor {
-                source: &source,
-                file_path: path,
-                language: ShaderLanguage::Wgsl,
-                ..Default::default()
-            })
-            .map_err(|e| format!("{path}: {e:?}"))?;
+fn compile(module: &str, strip: bool) -> Result<naga::Module, String> {
+    let path: ModulePath = module.parse().map_err(|e| format!("{module}: {e:?}"))?;
+    let options = CompileOptions {
+        imports: true,
+        condcomp: true,
+        visibility: false,
+        strip,
+        ..Default::default()
+    };
+    let wgsl = Compiler::new_with_resolver(options, FileResolver::new("assets"))
+        .compile_module(&path)
+        .map_err(|e| format!("{module}: {e}"))?
+        .to_string();
+    naga::front::wgsl::parse_str(&wgsl)
+        .map_err(|e| format!("{module}: {}", e.emit_to_string(&wgsl)))
+}
+
+fn compile_libraries() -> Result<(), String> {
+    for module in LIBRARIES {
+        compile(module, false)?;
     }
-    Ok(composer)
+    Ok(())
 }
 
 fn compose_material(path: &str) -> Result<naga::Module, String> {
-    let source = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    composer_with_libraries()?
-        .make_naga_module(NagaModuleDescriptor {
-            source: &source,
-            file_path: path,
-            shader_type: ShaderType::Wgsl,
-            ..Default::default()
-        })
-        .map_err(|e| format!("{path}: {e:?}"))
+    let stem = path.trim_start_matches("assets/").trim_end_matches(".wesl");
+    compile(&format!("package::{}", stem.replace('/', "::")), true)
 }
 
 // The libraries are only ever compiled by the render pipeline at runtime, where
 // a syntax or type error surfaces as a shader compile failure with the app
 // already open; this pins that both parse and type-check under the same
-// naga_oil version bevy uses.
+// wesl version bevy uses.
 #[test]
 fn libraries_compose() {
-    if let Err(e) = composer_with_libraries() {
+    if let Err(e) = compile_libraries() {
         panic!("{e}");
     }
 }
@@ -54,7 +55,7 @@ fn libraries_compose() {
 // that its `generate` entry point survives composition.
 #[test]
 fn shipped_materials_compose() {
-    for path in ["assets/materials/water.wgsl", "assets/materials/rocky.wgsl"] {
+    for path in ["assets/materials/water.wesl", "assets/materials/rocky.wesl"] {
         match compose_material(path) {
             Ok(module) => assert!(
                 module.entry_points.iter().any(|e| e.name == "generate"),
@@ -71,7 +72,7 @@ fn shipped_materials_compose() {
 // each other for the shipped materials.
 #[test]
 fn parsed_offsets_agree_with_naga() {
-    for path in ["assets/materials/water.wgsl", "assets/materials/rocky.wgsl"] {
+    for path in ["assets/materials/water.wesl", "assets/materials/rocky.wesl"] {
         let source = std::fs::read_to_string(path).expect("material should be readable");
         let layout = parse_params(&source).expect("Params block should parse");
         let module = compose_material(path).expect("material should compose");

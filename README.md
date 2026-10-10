@@ -10,7 +10,7 @@ TODO(jb-doc): prose.
 
 ```bash
 just run                    # opens the editor
-just new-material slate     # scaffolds assets/materials/slate.wgsl
+just new-material slate     # scaffolds assets/materials/slate.wesl
 just combine output/water output/rocky   # packs exports into output/combined
 just check                  # build + clippy, the gate a change has to pass
 just test
@@ -22,14 +22,14 @@ maps on screen and puts the error in the status bar.
 
 ## Writing a material
 
-A material is one WGSL file in `assets/materials/`. It declares its parameters,
+A material is one WESL file in `assets/materials/`. It declares its parameters,
 fills in a `Surface`, and ends with the entry point that writes it.
 
-```wgsl
+```wesl
 // @material Slate
 
-#import pbr_gen::maps::{Surface, default_surface, write_surface, globals}
-#import pbr_gen::noise::{perlin_noise, fbm_perlin}
+import package::shaders::lib::pbr_maps::{Surface, default_surface, write_surface, globals};
+import package::shaders::lib::noise::{perlin_noise, fbm_perlin};
 
 struct Params {
     // @group Colour
@@ -58,7 +58,7 @@ entry point living in the imported library could not call a `surface()` defined
 in the importer. `just new-material <name>` scaffolds it.
 
 Files whose name begins with `_` are not listed in the editor, which is what
-keeps `_template.wgsl` out of the material list.
+keeps `_template.wesl` out of the material list.
 
 ### `@ui` annotations
 
@@ -152,10 +152,10 @@ was.
 
 | Path | Role |
 |---|---|
-| `assets/shaders/lib/pbr_maps.wgsl` | `Surface` and channel packing; group-0 bindings |
-| `assets/shaders/lib/noise.wgsl` | the noise primitives materials sample |
-| `assets/shaders/map_view.wgsl` | channel masking for the map thumbnails |
-| `assets/materials/*.wgsl` | the hot-reloaded unit |
+| `assets/shaders/lib/pbr_maps.wesl` | `Surface` and channel packing; group-0 bindings |
+| `assets/shaders/lib/noise.wesl` | the noise primitives materials sample |
+| `assets/shaders/map_view.wesl` | channel masking for the map thumbnails |
+| `assets/materials/*.wesl` | the hot-reloaded unit |
 | `src/material/params.rs` | the `@ui` grammar and std140 layout |
 | `src/material/catalog.rs` | what is on disk and which of it is being edited |
 | `src/gpu/pipeline.rs` | per-material compute pipeline and bind groups |

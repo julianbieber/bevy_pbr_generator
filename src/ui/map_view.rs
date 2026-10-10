@@ -18,8 +18,10 @@ pub enum Channel {
 }
 
 impl Channel {
+    /// Every channel, in the order the channel selector lists them.
     pub const ALL: [Channel; 5] = [Self::Rgb, Self::R, Self::G, Self::B, Self::A];
 
+    /// The text the channel's button shows.
     pub fn label(self) -> &'static str {
         match self {
             Self::Rgb => "RGB",
@@ -56,6 +58,7 @@ pub struct MapViewMaterial {
 }
 
 impl MapViewMaterial {
+    /// A view of `map` showing `channel`.
     pub fn new(map: Handle<Image>, channel: Channel) -> Self {
         Self {
             settings: Vec4::new(channel.index(), 0.0, 0.0, 0.0),
@@ -63,6 +66,7 @@ impl MapViewMaterial {
         }
     }
 
+    /// Switches the view to `channel`; the map itself is unchanged.
     pub fn set_channel(&mut self, channel: Channel) {
         self.settings.x = channel.index();
     }
@@ -70,7 +74,7 @@ impl MapViewMaterial {
 
 impl UiMaterial for MapViewMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/map_view.wgsl".into()
+        "shaders/map_view.wesl".into()
     }
 }
 

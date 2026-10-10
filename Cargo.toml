@@ -19,5 +19,5 @@ half = "2"
 image = { version = "0.24", default-features = false, features = ["png"] }
 
 [dev-dependencies]
-naga_oil = "0.22"
-naga = "29"
+naga = { version = "30", features = ["wgsl-in"] }
+wesl = "0.6"
