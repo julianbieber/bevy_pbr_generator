@@ -41,9 +41,9 @@ pub fn dispatch_maps(
 
     let state = match pipeline_cache.get_compute_pipeline_state(id) {
         CachedPipelineState::Ok(_) => CompileState::Ok,
-        CachedPipelineState::Err(ShaderCacheError::ShaderNotLoaded(_))
-        | CachedPipelineState::Err(ShaderCacheError::ShaderImportNotYetAvailable) => {
-            CompileState::Loading
+        CachedPipelineState::Err(ShaderCacheError::ShaderNotLoaded(_)) => CompileState::Loading,
+        CachedPipelineState::Err(ShaderCacheError::ShaderImportNotYetAvailable) => {
+            CompileState::WaitingOnImport
         }
         CachedPipelineState::Err(error) => CompileState::Failed(error.to_string()),
         _ => CompileState::Loading,

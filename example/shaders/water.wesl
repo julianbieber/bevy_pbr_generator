@@ -1,8 +1,8 @@
 // @material Water
 // @author bevy_pbr_generator
 
-import package::shaders::lib::pbr_maps::{Surface, default_surface, write_surface, globals};
-import package::shaders::lib::noise::{perlin_noise, simplex_noise, fbm_perlin};
+import bevy_pbr_generator::pbr_maps::{Surface, default_surface};
+import bevy_pbr_generator::noise;
 
 struct Params {
     // @group Colour
@@ -33,14 +33,14 @@ struct Params {
 const NORMAL_EPSILON: f32 = 1.0 / 512.0;
 
 fn height(uv: vec2<f32>) -> f32 {
-    return perlin_noise(uv, params.wave_scale * 0.8) * 0.5
-        + perlin_noise(uv, params.wave_scale * 1.5) * 0.3
-        + perlin_noise(uv, params.ripple_scale) * 0.2
+    return noise::perlin_noise(uv, params.wave_scale * 0.8) * 0.5
+        + noise::perlin_noise(uv, params.wave_scale * 1.5) * 0.3
+        + noise::perlin_noise(uv, params.ripple_scale) * 0.2
         + sin(uv.x * params.wave_scale * 0.5 + uv.y * params.wave_scale * 0.5) * 0.15;
 }
 
 fn crest_factor(uv: vec2<f32>) -> f32 {
-    let n = simplex_noise(uv * params.wave_scale, params.wave_frequency);
+    let n = noise::simplex_noise(uv * params.wave_scale, params.wave_frequency);
     let t = (n + 1.0) * 0.5;
     return t * t;
 }
@@ -48,8 +48,8 @@ fn crest_factor(uv: vec2<f32>) -> f32 {
 fn surface(uv: vec2<f32>) -> Surface {
     var s = default_surface();
 
-    let depth_factor = (perlin_noise(uv, params.wave_scale * 0.5) + 1.0) * 0.5;
-    let ripple_factor = (perlin_noise(uv, params.ripple_scale) + 1.0) * 0.5;
+    let depth_factor = (noise::perlin_noise(uv, params.wave_scale * 0.5) + 1.0) * 0.5;
+    let ripple_factor = (noise::perlin_noise(uv, params.ripple_scale) + 1.0) * 0.5;
     let crest = crest_factor(uv);
 
     let base = mix(params.deep_color, params.shallow_color, depth_factor);
@@ -64,8 +64,8 @@ fn surface(uv: vec2<f32>) -> Surface {
     let crest_glow = vec3<f32>(0.7, 0.85, 0.95) * params.emissive_intensity * 1.5;
     s.emissive = mix(deep_glow, crest_glow, crest);
 
-    let wave_factor = (fbm_perlin(uv, params.wave_scale, u32(max(params.wave_octaves, 1)), 2.0, 0.5) + 1.0) * 0.5;
-    let sharp_crest = pow((simplex_noise(uv * params.wave_scale * 1.5, params.wave_frequency * 2.0) + 1.0) * 0.5, 3.0);
+    let wave_factor = (noise::fbm_perlin(uv, params.wave_scale, u32(max(params.wave_octaves, 1)), 2.0, 0.5) + 1.0) * 0.5;
+    let sharp_crest = pow((noise::simplex_noise(uv * params.wave_scale * 1.5, params.wave_frequency * 2.0) + 1.0) * 0.5, 3.0);
     let spread = params.crest_roughness - params.base_roughness;
     s.roughness = clamp(
         params.base_roughness + spread * sharp_crest + spread * wave_factor * 0.3,
@@ -74,7 +74,7 @@ fn surface(uv: vec2<f32>) -> Surface {
     );
     s.metallic = 0.0;
 
-    let shadow_factor = (perlin_noise(uv, params.wave_scale * 0.5) + 1.0) * 0.5;
+    let shadow_factor = (noise::perlin_noise(uv, params.wave_scale * 0.5) + 1.0) * 0.5;
     s.occlusion = clamp(0.95 - shadow_factor * 0.05, 0.85, 1.0);
 
     let dzdx = (height(uv + vec2<f32>(NORMAL_EPSILON, 0.0)) - height(uv - vec2<f32>(NORMAL_EPSILON, 0.0)))
@@ -93,21 +93,12 @@ fn surface(uv: vec2<f32>) -> Surface {
     let wave_angle = uv.x * params.wave_scale * 0.5;
     s.anisotropy_direction = vec2<f32>(sin(wave_angle), cos(wave_angle));
     s.anisotropy_strength = clamp(
-        (perlin_noise(uv, params.wave_scale) + 1.0) * 0.5 * params.anisotropy_strength,
+        (noise::perlin_noise(uv, params.wave_scale) + 1.0) * 0.5 * params.anisotropy_strength,
         0.0,
         1.0,
     );
 
-    s.depth = clamp((perlin_noise(uv, params.wave_scale) + 1.0) * 0.5 * params.depth_scale, 0.0, 1.0);
+    s.depth = clamp((noise::perlin_noise(uv, params.wave_scale) + 1.0) * 0.5 * params.depth_scale, 0.0, 1.0);
 
     return s;
-}
-
-@compute @workgroup_size(8, 8, 1)
-fn generate(@builtin(global_invocation_id) id: vec3<u32>) {
-    if id.x >= globals.resolution.x || id.y >= globals.resolution.y {
-        return;
-    }
-    let uv = (vec2<f32>(id.xy) + 0.5) / vec2<f32>(globals.resolution);
-    write_surface(id.xy, surface(uv));
 }

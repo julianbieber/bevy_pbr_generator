@@ -1,0 +1,7 @@
+# A material project as any consumer of the editor would set one up.
+edition = "2026_pre"
+package-manager = "cargo"
+root = "shaders"
+
+[dependencies]
+bevy_pbr_generator = { path = ".." }

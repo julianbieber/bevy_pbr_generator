@@ -11,6 +11,9 @@ pub enum CompileState {
     /// dispatched, and the previously generated textures stay bound.
     #[default]
     Loading,
+    /// Composition is waiting on an imported module that is not registered.
+    /// Transient while that module loads; permanent when nothing provides it.
+    WaitingOnImport,
     Ok,
     /// Compilation failed, with the message naga produced. The previous
     /// textures stay bound and the session continues.

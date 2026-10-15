@@ -15,11 +15,11 @@ use bevy::shader::Shader;
 
 use crate::status::SharedStatus;
 
-/// Side of one compute workgroup, matching `@workgroup_size(8, 8, 1)` in every
-/// material's entry point.
+/// Side of one compute workgroup, the size every generated entry module
+/// declares.
 pub const WORKGROUP_SIZE: u32 = 8;
 
-/// Strong handles to the shader libraries every material imports.
+/// Strong handles to the `bevy_pbr_generator` package modules materials import.
 ///
 /// Held for the life of the app because `import` resolves against loaded
 /// assets: without a live handle the import fails with "Shader import not yet
@@ -86,6 +86,7 @@ pub struct GpuPlugin;
 
 impl Plugin for GpuPlugin {
     fn build(&self, app: &mut App) {
+        crate::shaders::embed(app);
         app.init_resource::<Generation>()
             .init_resource::<GenerateRequest>()
             .init_resource::<ExportRequest>()
@@ -124,9 +125,9 @@ impl Plugin for GpuPlugin {
 
 fn load_shader_library(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(ShaderLibrary {
-        handles: vec![
-            asset_server.load("shaders/lib/noise.wesl"),
-            asset_server.load("shaders/lib/pbr_maps.wesl"),
-        ],
+        handles: crate::shaders::MODULE_ASSETS
+            .iter()
+            .map(|path| asset_server.load(*path))
+            .collect(),
     });
 }

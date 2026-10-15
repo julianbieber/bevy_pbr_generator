@@ -76,7 +76,7 @@ pub fn drive_export(
 
             export.0 = GenerateRequest {
                 generation: request.generation.wrapping_add(1),
-                shader: Some(active.shader.clone()),
+                shader: Some(active.entry.clone()),
                 images: handles.clone(),
                 params: active.packed(),
                 resolution,

@@ -74,7 +74,7 @@ impl MapViewMaterial {
 
 impl UiMaterial for MapViewMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/map_view.wesl".into()
+        "embedded://bevy_pbr_generator/ui/map_view.wesl".into()
     }
 }
 

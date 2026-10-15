@@ -9,9 +9,7 @@ use bevy::prelude::*;
 use crate::gpu::maps::{allocate_maps, MAP_COUNT};
 use crate::gpu::{GenerateRequest, Generation, PreviewMaps};
 use crate::material::catalog::{scan_materials, MaterialCatalog};
-
-/// Root of the asset directory on disk, as scanned for materials.
-pub const ASSET_ROOT: &str = "assets";
+use crate::material::project::MaterialProject;
 
 /// Resolutions offered in the preview and export dropdowns.
 pub const RESOLUTIONS: [u32; 5] = [256, 512, 1024, 2048, 4096];
@@ -111,11 +109,18 @@ impl Default for EditorSettings {
     }
 }
 
-pub struct EditorPlugin;
+/// The editor, opened on `project`.
+///
+/// The asset root must already be `project.package_root`: materials are loaded
+/// by their path relative to it.
+pub struct EditorPlugin {
+    pub project: MaterialProject,
+}
 
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PreviewShape>()
+        app.insert_resource(self.project.clone())
+            .init_resource::<PreviewShape>()
             .init_resource::<SunAngles>()
             .init_resource::<EditorSettings>()
             .init_resource::<MaterialCatalog>()
@@ -131,7 +136,7 @@ impl Plugin for EditorPlugin {
                     preview::follow_shape,
                     preview::follow_sun,
                     preview::bind_maps_to_material,
-                    reload_changed_materials,
+                    reload_changed_materials.before(build_request),
                     advance_animation,
                     build_request,
                 ),
@@ -143,12 +148,17 @@ fn load_catalog(
     mut commands: Commands,
     mut catalog: ResMut<MaterialCatalog>,
     mut images: ResMut<Assets<Image>>,
+    mut shaders: ResMut<Assets<bevy::shader::Shader>>,
     settings: Res<EditorSettings>,
     asset_server: Res<AssetServer>,
+    project: Res<MaterialProject>,
 ) {
-    catalog.materials = scan_materials(std::path::Path::new(ASSET_ROOT), &asset_server);
+    catalog.materials = scan_materials(&project, &asset_server, &mut shaders);
     if catalog.materials.is_empty() {
-        warn!("no materials found under {ASSET_ROOT}/materials");
+        warn!(
+            "no materials found under {}",
+            project.package_root.display()
+        );
     }
 
     let resolution = settings.preview_resolution;
@@ -204,7 +214,7 @@ fn build_request(
     };
 
     request.generation = generation.0;
-    request.shader = Some(active.shader.clone());
+    request.shader = Some(active.entry.clone());
     request.params = active.packed();
     request.images = maps.images.clone();
     request.resolution = maps.resolution;

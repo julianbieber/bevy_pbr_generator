@@ -1,5 +1,5 @@
-//! The materials found on disk, which one is being edited, and the live
-//! parameter values for each.
+//! The materials found in the opened project, which one is being edited, and
+//! the live parameter values for each.
 
 use std::path::{Path, PathBuf};
 
@@ -8,9 +8,8 @@ use bevy::prelude::*;
 use bevy::shader::Shader;
 
 use crate::material::params::{parse_params, ParamsLayout};
-
-/// Directory, relative to the asset root, scanned for material shaders.
-pub const MATERIALS_DIR: &str = "materials";
+use crate::material::project::MaterialProject;
+use crate::shaders::{entry_asset_path, entry_module_source};
 
 /// One material shader on disk, with the parameters parsed out of it.
 ///
@@ -21,9 +20,16 @@ pub const MATERIALS_DIR: &str = "materials";
 pub struct MaterialSpec {
     /// Display name, from the `// @material` header or the file stem.
     pub name: String,
+    /// Path of the material file relative to the project's package root.
     pub asset_path: String,
     pub disk_path: PathBuf,
+    /// The module path an import names the material by, `package::…`.
+    pub module_path: String,
+    /// The material file itself. Held so the file stays loaded and its edits
+    /// arrive as `Modified` events for this id.
     pub shader: Handle<Shader>,
+    /// The generated entry module the pipeline is built from.
+    pub entry: Handle<Shader>,
     pub layout: ParamsLayout,
     pub values: Vec<[f32; 4]>,
     /// Why the most recent parse of this file failed, if it did.
@@ -95,60 +101,75 @@ pub fn declared_name(source: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
-/// Whether a directory entry is a material the editor should list.
-///
-/// Files whose name begins with `_` are skipped, which is what keeps
-/// `_template.wesl` out of the material list.
-pub fn is_material_file(path: &Path) -> bool {
+fn has_material_header(source: &str) -> bool {
+    !declared_name(source, "").is_empty()
+}
+
+/// Whether a project file with this `path` and `source` is a material the
+/// editor should list: a `.wesl` file whose leading comment block declares a
+/// `@material` name. Files whose name begins with `_` are skipped, which is what
+/// keeps `_template.wesl` out of the material list.
+pub fn is_material_file(path: &Path, source: &str) -> bool {
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return false;
     };
-    path.extension().and_then(|e| e.to_str()) == Some("wesl") && !name.starts_with('_')
+    path.extension().and_then(|e| e.to_str()) == Some("wesl")
+        && !name.starts_with('_')
+        && has_material_header(source)
 }
 
-/// Reads every material under `<asset_root>/materials`, in name order.
+/// Lists every material in `project`, in module path order, loading each file
+/// as a Shader asset and adding its generated entry module to `shaders`.
 ///
 /// A file that fails to parse is still listed, with its `error` set and an empty
-/// layout, so that fixing it in place brings it back without a restart.
-pub fn scan_materials(asset_root: &Path, asset_server: &AssetServer) -> Vec<MaterialSpec> {
-    let dir = asset_root.join(MATERIALS_DIR);
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        warn!("no material directory at {}", dir.display());
-        return Vec::new();
+/// layout, so that fixing it in place brings it back without a restart. Files
+/// the project scan skipped, and a scan that fails outright, are logged.
+pub fn scan_materials(
+    project: &MaterialProject,
+    asset_server: &AssetServer,
+    shaders: &mut Assets<Shader>,
+) -> Vec<MaterialSpec> {
+    let files = match project.files() {
+        Ok((files, warnings)) => {
+            for warning in warnings {
+                warn!("{warning}");
+            }
+            files
+        }
+        Err(e) => {
+            warn!("{e}");
+            return Vec::new();
+        }
     };
 
-    let mut paths: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| is_material_file(p))
-        .collect();
-    paths.sort();
-
-    paths
+    files
         .into_iter()
-        .map(|disk_path| {
-            let stem = disk_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("material")
-                .to_string();
-            let asset_path = format!("{MATERIALS_DIR}/{stem}.wesl");
-            let source = std::fs::read_to_string(&disk_path).unwrap_or_default();
-
-            let (layout, error) = match parse_params(&source) {
+        .filter_map(|file| {
+            let asset_path = file.asset_path();
+            if !is_material_file(Path::new(&asset_path), &file.source) {
+                return None;
+            }
+            let stem = file.components.last().cloned().unwrap_or_default();
+            let (layout, error) = match parse_params(&file.source) {
                 Ok(layout) => (layout, None),
                 Err(e) => (ParamsLayout::default(), Some(e.to_string())),
             };
+            let entry = Shader::from_wesl(
+                entry_module_source(&file.components),
+                entry_asset_path(&file.components),
+            );
 
-            MaterialSpec {
-                name: declared_name(&source, &stem),
+            Some(MaterialSpec {
+                name: declared_name(&file.source, &stem),
                 shader: asset_server.load(asset_path.clone()),
+                entry: shaders.add(entry),
+                module_path: file.module_path(),
                 values: layout.defaults(),
                 layout,
+                disk_path: project.package_root.join(&asset_path),
                 asset_path,
-                disk_path,
                 error,
-            }
+            })
         })
         .collect()
 }
@@ -190,19 +211,20 @@ pub fn reload(spec: &mut MaterialSpec) -> bool {
 mod tests {
     use super::*;
 
-    // The `_` prefix is the only thing keeping a template file out of the
-    // material list, so it has to hold for exactly the files it should.
+    // A project mixes materials with its own helper modules; the header is
+    // what tells them apart, and the `_` prefix is what keeps a template out.
     #[test]
-    fn underscore_prefixed_files_are_skipped() {
-        assert!(is_material_file(Path::new("assets/materials/water.wesl")));
-        assert!(!is_material_file(Path::new(
-            "assets/materials/_template.wesl"
-        )));
-        assert!(!is_material_file(Path::new("assets/materials/notes.txt")));
+    fn only_headed_files_without_underscore_are_materials() {
+        let headed = "// @material Water\n";
+        assert!(is_material_file(Path::new("water.wesl"), headed));
+        assert!(is_material_file(Path::new("walls/stone.wesl"), headed));
+        assert!(!is_material_file(Path::new("common.wesl"), "fn f() {}\n"));
+        assert!(!is_material_file(Path::new("_template.wesl"), headed));
+        assert!(!is_material_file(Path::new("notes.txt"), headed));
     }
 
-    // The header is what names a material in the list; without one the file
-    // stem has to stand in, or the list shows a blank row.
+    // The header is what names a material in the list; a listed material whose
+    // header was edited away keeps its file stem until restart, not a blank row.
     #[test]
     fn the_material_header_names_the_material() {
         assert_eq!(declared_name("// @material Water\n", "water"), "Water");
