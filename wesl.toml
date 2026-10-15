@@ -1,0 +1,4 @@
+# The WESL package `bevy_pbr_generator` that material projects depend on.
+edition = "2026_pre"
+package-manager = "cargo"
+root = "src/shaders"

@@ -16,25 +16,36 @@ test:
 
 check: build clippy
 
-# Opens the editor. Debug builds generate too slowly to drag a slider against.
-run *args:
-    cargo run --release -- {{args}}
+# Debug builds generate too slowly to drag a slider against.
+# Opens the editor on a material project (a directory with a wesl.toml), else on example/.
+run project="":
+    cargo run --release -- {{ if project == "" { "" } else { quote(join(invocation_directory(), project)) } }}
 
 # Combines material export folders into one image per map plus atlas.json.
 combine *args:
     cargo run --release --bin combine -- {{args}}
 
-# Scaffolds assets/materials/<name>.wesl from the template, ready to edit while
-# the editor is running.
-new-material name:
+# An open editor lists the new file after a restart.
+# Scaffolds <name>.wesl from the template at the package root of a material project.
+new-material project name:
     #!/usr/bin/env bash
     set -euo pipefail
-    target="assets/materials/{{name}}.wesl"
+    project={{ quote(join(invocation_directory(), project)) }}
+    if [ ! -f "$project/wesl.toml" ]; then
+        echo "$project has no wesl.toml" >&2
+        exit 1
+    fi
+    if [[ ! "{{name}}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        echo "{{name}} is not a WESL identifier, so it cannot name a module" >&2
+        exit 1
+    fi
+    root=$(sed -n 's/^root *= *"\(.*\)" *$/\1/p' "$project/wesl.toml")
+    target="$project/${root:-shaders}/{{name}}.wesl"
     if [ -e "$target" ]; then
         echo "$target already exists" >&2
         exit 1
     fi
-    sed 's/@material Template/@material {{name}}/' assets/materials/_template.wesl > "$target"
+    sed 's/@material Template/@material {{name}}/' {{ quote(justfile_directory() / "example/shaders/_template.wesl") }} > "$target"
     echo "wrote $target"
 
 fmt:

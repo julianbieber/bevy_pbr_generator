@@ -9,27 +9,65 @@ TODO(jb-doc): prose.
 ## Running
 
 ```bash
-just run                    # opens the editor
-just new-material slate     # scaffolds assets/materials/slate.wesl
+just run                          # opens the editor on example/
+just run ../my_game               # opens it on another material project
+just new-material ../my_game slate   # scaffolds <package root>/slate.wesl there
 just combine output/water output/rocky   # packs exports into output/combined
-just check                  # build + clippy, the gate a change has to pass
+just check                        # build + clippy, the gate a change has to pass
 just test
 ```
 
-Edit a file under `assets/materials/` while the editor is open: it recompiles and
-re-renders without a restart. A shader that fails to compile leaves the previous
-maps on screen and puts the error in the status bar.
+Edit a material, or any module it imports, while the editor is open: it
+recompiles and re-renders without a restart. Edits to this package's own modules
+are picked up only under `just run`, which is what tells bevy where the source is. A shader that fails to compile
+leaves the previous maps on screen and puts the error in the status bar. A
+material file added while the editor is open is listed after a restart.
+
+## Using it from your project
+
+Materials live in the project that needs the textures, not here. This repo
+provides the WESL package `bevy_pbr_generator`, which those materials import,
+and a template to start from.
+
+A material project is any directory with a `wesl.toml`. Point its dependency at
+this checkout so wgsl-analyzer resolves the package:
+
+```toml
+edition = "2026_pre"
+package-manager = "cargo"
+root = "shaders"
+
+[dependencies]
+bevy_pbr_generator = { path = "../bevy_pbr_generator" }
+```
+
+`just run <dir>` opens the editor on it. The editor reads the same `wesl.toml`
+with the same rules the language server applies — `root`, `include` and
+`exclude` — so `package::` means the same thing in both. A few limits follow
+from that:
+
+- The editor embeds the package it was built from. The language server reads the
+  checkout the `path` names; keep them the same checkout.
+- `bevy_pbr_generator` is the only dependency the editor provides, under that
+  name. A material importing any other package will not compile, and the editor
+  warns at startup about every other dependency `wesl.toml` lists.
+- A project's own helper modules must be `.wesl`. File and directory names must be
+  WESL identifiers; the scan skips anything else and logs it.
+- The editor watches the whole package root, so keep it to shaders.
+
+`example/` is such a project, holding the template and two example materials.
 
 ## Writing a material
 
-A material is one WESL file in `assets/materials/`. It declares its parameters,
-fills in a `Surface`, and ends with the entry point that writes it.
+A material is one WESL file anywhere under the project's package root, marked
+by a `// @material <name>` line in its leading comment block. It declares its
+parameters and fills in a `Surface`.
 
 ```wesl
 // @material Slate
 
-import package::shaders::lib::pbr_maps::{Surface, default_surface, write_surface, globals};
-import package::shaders::lib::noise::{perlin_noise, fbm_perlin};
+import bevy_pbr_generator::pbr_maps::{Surface, default_surface};
+import bevy_pbr_generator::noise;
 
 struct Params {
     // @group Colour
@@ -41,24 +79,19 @@ struct Params {
 
 fn surface(uv: vec2<f32>) -> Surface {
     var s = default_surface();
-    s.base_color = params.tint * (perlin_noise(uv, params.scale) + 1.0) * 0.5;
+    s.base_color = params.tint * (noise::perlin_noise(uv, params.scale) + 1.0) * 0.5;
     return s;
-}
-
-@compute @workgroup_size(8, 8, 1)
-fn generate(@builtin(global_invocation_id) id: vec3<u32>) {
-    if id.x >= globals.resolution.x || id.y >= globals.resolution.y { return; }
-    let uv = (vec2<f32>(id.xy) + 0.5) / vec2<f32>(globals.resolution);
-    write_surface(id.xy, surface(uv));
 }
 ```
 
-The trailing entry point is unavoidable: WGSL has no forward declaration, so an
-entry point living in the imported library could not call a `surface()` defined
-in the importer. `just new-material <name>` scaffolds it.
+A material declares no entry point. The editor writes one for it, which imports
+its `surface()` and stores the result into the maps. Importing a module, as with
+`noise` above, and calling into it by path saves listing every function in the
+import. The project's own modules are imported through `package::` or `super::`.
 
-Files whose name begins with `_` are not listed in the editor, which is what
-keeps `_template.wesl` out of the material list.
+A file without the header is a helper module and is not listed. Neither is a
+file whose name begins with `_`, which is what keeps `_template.wesl` out of the
+material list.
 
 ### `@ui` annotations
 
@@ -152,10 +185,13 @@ was.
 
 | Path | Role |
 |---|---|
-| `assets/shaders/lib/pbr_maps.wesl` | `Surface` and channel packing; group-0 bindings |
-| `assets/shaders/lib/noise.wesl` | the noise primitives materials sample |
-| `assets/shaders/map_view.wesl` | channel masking for the map thumbnails |
-| `assets/materials/*.wesl` | the hot-reloaded unit |
+| `src/shaders/pbr_maps.wesl` | `bevy_pbr_generator::pbr_maps`: `Surface` and channel packing; group-0 bindings |
+| `src/shaders/noise.wesl` | `bevy_pbr_generator::noise`: the noise primitives materials sample |
+| `src/shaders/mod.rs` | embedding of the package, and the entry module written for each material |
+| `wesl.toml` | the package's root, for the language server of a material project |
+| `example/` | a material project: the template and the example materials |
+| `src/ui/map_view.wesl` | channel masking for the map thumbnails |
+| `src/material/project.rs` | the material project the editor is opened on |
 | `src/material/params.rs` | the `@ui` grammar and std140 layout |
 | `src/material/catalog.rs` | what is on disk and which of it is being edited |
 | `src/gpu/pipeline.rs` | per-material compute pipeline and bind groups |

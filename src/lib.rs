@@ -6,5 +6,6 @@
 pub mod app;
 pub mod gpu;
 pub mod material;
+pub mod shaders;
 pub mod status;
 pub mod ui;

@@ -1,8 +1,8 @@
 // @material Rocky
 // @author bevy_pbr_generator
 
-import package::shaders::lib::pbr_maps::{Surface, default_surface, write_surface, globals};
-import package::shaders::lib::noise::{perlin_noise, simplex_noise, fbm_perlin};
+import bevy_pbr_generator::pbr_maps::{Surface, default_surface};
+import bevy_pbr_generator::noise;
 
 struct Params {
     // @group Colour
@@ -34,26 +34,26 @@ struct Params {
 const NORMAL_EPSILON: f32 = 1.0 / 512.0;
 
 fn height(uv: vec2<f32>) -> f32 {
-    let h = perlin_noise(uv, params.rock_scale * 0.6) * 0.5
-        + perlin_noise(uv, params.rock_scale * 1.2) * 0.3
-        + perlin_noise(uv, params.detail_scale) * 0.15
-        + perlin_noise(uv, params.grain_scale) * 0.05;
+    let h = noise::perlin_noise(uv, params.rock_scale * 0.6) * 0.5
+        + noise::perlin_noise(uv, params.rock_scale * 1.2) * 0.3
+        + noise::perlin_noise(uv, params.detail_scale) * 0.15
+        + noise::perlin_noise(uv, params.grain_scale) * 0.05;
     return h * params.relief_height;
 }
 
 fn surface(uv: vec2<f32>) -> Surface {
     var s = default_surface();
 
-    let formation_factor = (perlin_noise(uv, params.rock_scale * 0.8) + 1.0) * 0.5;
-    let detail_factor = (perlin_noise(uv, params.detail_scale) + 1.0) * 0.5;
-    let grain_factor = (perlin_noise(uv, params.grain_scale) + 1.0) * 0.5;
+    let formation_factor = (noise::perlin_noise(uv, params.rock_scale * 0.8) + 1.0) * 0.5;
+    let detail_factor = (noise::perlin_noise(uv, params.detail_scale) + 1.0) * 0.5;
+    let grain_factor = (noise::perlin_noise(uv, params.grain_scale) + 1.0) * 0.5;
 
     let base = mix(params.base_color, params.mid_color, formation_factor);
     let detail = mix(params.mid_color, params.highlight_color, detail_factor);
     let mixed = mix(base, detail, 0.4);
     let grain_variation = vec3<f32>(0.03) * (grain_factor - 0.5);
 
-    let dry_noise = simplex_noise(uv * params.detail_scale, 2.0);
+    let dry_noise = noise::simplex_noise(uv * params.detail_scale, 2.0);
     let dry_t = (dry_noise + 1.0) * 0.5;
     let tinted = mix(mixed, params.dry_color, dry_t * dry_t * params.dry_amount);
 
@@ -62,7 +62,7 @@ fn surface(uv: vec2<f32>) -> Surface {
 
     s.emissive = params.emissive;
 
-    let noise_factor = (fbm_perlin(uv, params.rock_scale, u32(max(params.octaves, 1)), 2.0, 0.5) + 1.0) * 0.5;
+    let noise_factor = (noise::fbm_perlin(uv, params.rock_scale, u32(max(params.octaves, 1)), 2.0, 0.5) + 1.0) * 0.5;
     let spread = params.roughness_variation * 2.0;
     s.roughness = clamp(
         params.base_roughness + (noise_factor - 0.5) * spread,
@@ -71,8 +71,8 @@ fn surface(uv: vec2<f32>) -> Surface {
     );
     s.metallic = params.metallic;
 
-    let formation_shadow = (perlin_noise(uv, params.rock_scale * 0.5) + 1.0) * 0.5;
-    let detail_shadow = (perlin_noise(uv, params.detail_scale) + 1.0) * 0.5;
+    let formation_shadow = (noise::perlin_noise(uv, params.rock_scale * 0.5) + 1.0) * 0.5;
+    let detail_shadow = (noise::perlin_noise(uv, params.detail_scale) + 1.0) * 0.5;
     s.occlusion = clamp(
         params.base_occlusion - formation_shadow * 0.25 - detail_shadow * 0.15,
         0.0,
@@ -89,21 +89,12 @@ fn surface(uv: vec2<f32>) -> Surface {
     s.specular = params.specular;
 
     s.anisotropy_strength = clamp(
-        (perlin_noise(uv, params.rock_scale * 0.3) + 1.0) * 0.5 * params.anisotropy_strength,
+        (noise::perlin_noise(uv, params.rock_scale * 0.3) + 1.0) * 0.5 * params.anisotropy_strength,
         0.0,
         1.0,
     );
 
-    s.depth = clamp((perlin_noise(uv, params.rock_scale * 0.8) + 1.0) * 0.5 * params.depth_scale, 0.0, 1.0);
+    s.depth = clamp((noise::perlin_noise(uv, params.rock_scale * 0.8) + 1.0) * 0.5 * params.depth_scale, 0.0, 1.0);
 
     return s;
-}
-
-@compute @workgroup_size(8, 8, 1)
-fn generate(@builtin(global_invocation_id) id: vec3<u32>) {
-    if id.x >= globals.resolution.x || id.y >= globals.resolution.y {
-        return;
-    }
-    let uv = (vec2<f32>(id.xy) + 0.5) / vec2<f32>(globals.resolution);
-    write_surface(id.xy, surface(uv));
 }

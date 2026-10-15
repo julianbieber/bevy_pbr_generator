@@ -1,6 +1,9 @@
-//! Entry point: opens the editor.
+//! Entry point: opens the editor on the material project named on the command
+//! line, or on the example project when none is.
 
-use bevy::asset::AssetPlugin;
+use std::path::PathBuf;
+
+use bevy::asset::{AssetMetaCheck, AssetPlugin};
 use bevy::feathers::dark_theme::create_dark_theme;
 use bevy::feathers::theme::UiTheme;
 use bevy::feathers::FeathersPlugins;
@@ -9,13 +12,35 @@ use bevy::render::error_handler::{ErrorType, RenderError, RenderErrorHandler, Re
 
 use bevy_pbr_generator::app::EditorPlugin;
 use bevy_pbr_generator::gpu::GpuPlugin;
+use bevy_pbr_generator::material::project::MaterialProject;
 use bevy_pbr_generator::ui::EditorUiPlugin;
 
 fn main() {
+    let dir = std::env::args_os()
+        .nth(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example"));
+    let project = match MaterialProject::open(&dir) {
+        Ok(project) => project,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+    for name in project.foreign_dependencies() {
+        eprintln!(
+            "warning: `{}` declares the dependency `{name}`, which the editor does not provide; \
+             a material importing it will not compile",
+            project.toml_dir.join("wesl.toml").display()
+        );
+    }
+
     App::new()
         .add_plugins(
             DefaultPlugins
                 .set(AssetPlugin {
+                    file_path: project.package_root.to_string_lossy().into_owned(),
+                    meta_check: AssetMetaCheck::Never,
                     watch_for_changes_override: Some(true),
                     ..default()
                 })
@@ -31,7 +56,7 @@ fn main() {
         .add_plugins(FeathersPlugins)
         .insert_resource(UiTheme(create_dark_theme()))
         .insert_resource(RenderErrorHandler(tolerate_shader_errors))
-        .add_plugins((GpuPlugin, EditorPlugin, EditorUiPlugin))
+        .add_plugins((GpuPlugin, EditorPlugin { project }, EditorUiPlugin))
         .run();
 }
 

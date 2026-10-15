@@ -1,6 +1,7 @@
 //! The compute pipeline built for the active material, and the bind groups it
 //! is dispatched with.
 
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_resource::binding_types::{texture_storage_2d, uniform_buffer_sized};
@@ -71,11 +72,13 @@ pub struct ComputeBindings {
     pub export: ComputeBinding,
 }
 
-/// The pipeline currently built for the active material.
+/// The pipeline for the active material, and every pipeline queued so far,
+/// keyed by the entry module it was built from.
 #[derive(Resource, Debug, Default)]
 pub struct MaterialPipeline {
     pub shader: Option<AssetId<Shader>>,
     pub id: Option<CachedComputePipelineId>,
+    built: HashMap<AssetId<Shader>, CachedComputePipelineId>,
 }
 
 pub fn init_compute_resources(mut commands: Commands, render_device: Res<RenderDevice>) {
@@ -120,7 +123,8 @@ pub fn prepare_pipeline(
     }
 
     pipeline.shader = Some(shader.id());
-    pipeline.id = Some(
+
+    let id = *pipeline.built.entry(shader.id()).or_insert_with(|| {
         pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: Some("pbr_gen_material".into()),
             layout: vec![layouts.maps.clone(), layouts.params.clone()],
@@ -128,8 +132,9 @@ pub fn prepare_pipeline(
             entry_point: Some("generate".into()),
             zero_initialize_workgroup_memory: false,
             ..default()
-        }),
-    );
+        })
+    });
+    pipeline.id = Some(id);
 }
 
 pub fn prepare_bind_groups(

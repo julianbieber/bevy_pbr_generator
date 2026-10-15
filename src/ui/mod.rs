@@ -25,7 +25,7 @@ use bevy::window::SystemCursorIcon;
 use crate::app::{EditorSettings, PreviewShape, SunAngles, RESOLUTIONS};
 use crate::gpu::export::ExportJob;
 use crate::gpu::maps::{MapKind, MAP_COUNT};
-use crate::gpu::{Generation, PreviewMaps};
+use crate::gpu::{Generation, PreviewMaps, ShaderLibrary};
 use crate::material::catalog::MaterialCatalog;
 use crate::status::{CompileState, SharedStatus};
 use map_view::{Channel, MapViewMaterial};
@@ -102,6 +102,7 @@ pub struct EditorUiPlugin;
 
 impl Plugin for EditorUiPlugin {
     fn build(&self, app: &mut App) {
+        bevy::asset::embedded_asset!(app, "map_view.wesl");
         app.init_resource::<Channel>()
             .init_resource::<SelectedMap>()
             .init_resource::<params_panel::PanelState>()
@@ -530,6 +531,8 @@ fn update_full_map_view(
 fn update_status_text(
     status: Res<SharedStatus>,
     catalog: Res<MaterialCatalog>,
+    library: Res<ShaderLibrary>,
+    asset_server: Res<AssetServer>,
     maps: Res<PreviewMaps>,
     job: Res<ExportJob>,
     mut text: Query<(&mut Text, &mut TextColor), With<StatusText>>,
@@ -549,13 +552,27 @@ fn update_status_text(
 
     let parse_error = catalog.active().and_then(|s| s.error.clone());
 
+    let everything_loaded = catalog
+        .active()
+        .is_some_and(|s| asset_server.is_loaded_with_dependencies(&s.shader))
+        && library
+            .handles
+            .iter()
+            .all(|h| asset_server.is_loaded_with_dependencies(h));
+
     let (message, tint) = match (parse_error, &compile) {
         (Some(error), _) => (error, Color::srgb(0.95, 0.45, 0.4)),
         (None, CompileState::Failed(error)) => (
             error.lines().next().unwrap_or("shader error").to_string(),
             Color::srgb(0.95, 0.45, 0.4),
         ),
-        (None, CompileState::Loading) => ("compiling".to_string(), TEXT_DIM),
+        (None, CompileState::WaitingOnImport) if everything_loaded => (
+            "an import does not resolve; the log names it".to_string(),
+            Color::srgb(0.95, 0.45, 0.4),
+        ),
+        (None, CompileState::Loading | CompileState::WaitingOnImport) => {
+            ("compiling".to_string(), TEXT_DIM)
+        }
         (None, CompileState::Ok) => (
             format!(
                 "compiled OK · {}x{} · {MAP_COUNT} maps · {:.1} ms",

@@ -9,6 +9,7 @@ default-run = "bevy_pbr_generator"
 bevy = { version = "0.20", features = [
     "bevy_feathers",
     "file_watcher",
+    "embedded_watcher",
     "png",
     "pbr_transmission_textures",
     "pbr_specular_textures",
@@ -17,7 +18,7 @@ bevy = { version = "0.20", features = [
 ] }
 half = "2"
 image = { version = "0.24", default-features = false, features = ["png"] }
+wesl = "0.6"
 
 [dev-dependencies]
 naga = { version = "30", features = ["wgsl-in"] }
-wesl = "0.6"
