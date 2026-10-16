@@ -57,6 +57,29 @@ from that:
 
 `example/` is such a project, holding the template and two example materials.
 
+### Pinning it with mise
+
+Every push to `main` that passes CI is tagged `v0.<n>`, counting up from
+`v0.1`. To pin a project to one of those tags, run this in the project:
+
+```bash
+mise use "cargo:https://github.com/julianbieber/bevy_pbr_generator@tag:v0.1"
+```
+
+mise builds it from source with `cargo install`, so bevy's native build
+dependencies have to be present. That puts both binaries on the project's
+`PATH`:
+
+```bash
+bevy_pbr_generator .               # the editor, on the project in this directory
+combine output/water output/rocky  # the same as `just combine`
+```
+
+An installed editor has no `example/` to fall back on, so it needs the project
+directory passed explicitly. The `path` in `wesl.toml` still has to name a
+checkout of this repo, at the same tag as the one mise installed, for the
+language server to agree with the editor.
+
 ## Writing a material
 
 A material is one WESL file anywhere under the project's package root, marked
