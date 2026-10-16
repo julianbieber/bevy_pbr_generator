@@ -59,3 +59,29 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
+
+  tag:
+    name: Tag release
+    if: github.event_name == 'push'
+    needs: [check, build, clippy, fmt]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: tag
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag the commit with the next v0.x
+        run: |
+          if [ -n "$(git tag --points-at HEAD 'v0.*')" ]; then
+            echo "HEAD is already tagged"
+            exit 0
+          fi
+          latest=$(git tag --list 'v0.*' --sort=-v:refname | head -n 1)
+          next="v0.$(( ${latest:+${latest#v0.}} + 1 ))"
+          git tag "$next"
+          git push origin "$next"
+          echo "tagged $next"
