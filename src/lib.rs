@@ -4,6 +4,7 @@
 //! compute pipeline that renders them, and the editor built around both.
 
 pub mod app;
+pub mod codegen;
 pub mod gpu;
 pub mod material;
 pub mod shaders;

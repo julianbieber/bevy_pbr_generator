@@ -166,6 +166,25 @@ The export button generates a second map set at the export resolution, reads it
 back, and writes `<output>/<material>/<map>.png`. Preview and export resolutions
 are independent, so the preview can stay cheap while parameters are dialled in.
 
+### Using an export in a game
+
+**Copy code** puts Rust on the clipboard that builds the active material in a
+bevy project: one `material_<name>()` function returning a `bsn!` scene that
+gives its entity a `MeshMaterial3d<StandardMaterial>`, with the same texture
+slots and factors as the preview. Copy the exported `<material>/` folder
+directly under the project's `assets/`, paste the code, and spawn it with the
+mesh:
+
+```rust
+commands.spawn_scene(material_rocky()).insert(Mesh3d(mesh));
+```
+
+The code binds all ten maps, so the project needs bevy's
+`pbr_transmission_textures`, `pbr_specular_textures`, `pbr_anisotropy_texture`
+and `pbr_multi_layer_material_textures` features, or the slots it does not use
+removed. The mesh needs tangents. On X11 the clipboard is served by the
+editor, so paste before closing it.
+
 ## Combining materials
 
 `just combine [-o <dir>] <material folder>...` packs several exported materials
@@ -220,6 +239,7 @@ was.
 | `src/gpu/pipeline.rs` | per-material compute pipeline and bind groups |
 | `src/gpu/dispatch.rs` | generation-gated dispatch, pipeline status |
 | `src/gpu/export.rs` | readback and PNG encode |
+| `src/codegen.rs` | the Rust **Copy code** puts on the clipboard |
 | `src/bin/combine/` | the `combine` CLI: layout, compose, manifest |
 | `src/app/` | camera, preview mesh, sun |
 | `src/ui/` | the editor shell and the data-driven parameter panel |

@@ -49,7 +49,7 @@ pub fn spawn_preview(
 /// transmissions all default to it, and emissive to black — would multiply its
 /// map away whatever the material wrote; `clearcoat` and `anisotropy_strength`
 /// go further and key whether their shader path is compiled in at all.
-fn preview_material() -> StandardMaterial {
+pub fn preview_material() -> StandardMaterial {
     StandardMaterial {
         emissive: LinearRgba::WHITE,
         perceptual_roughness: 1.0,
@@ -100,10 +100,6 @@ pub fn follow_sun(
 }
 
 /// Points the preview material at the generated maps.
-///
-/// One image serves several `StandardMaterial` slots where Bevy reads different
-/// channels of the same packed map — occlusion and metallic-roughness both come
-/// from the ORM map, and all three transmission slots from the transmission map.
 pub fn bind_maps_to_material(
     maps: Res<PreviewMaps>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -124,20 +120,29 @@ pub fn bind_maps_to_material(
         let Some(mut material) = materials.get_mut(&handle.0) else {
             continue;
         };
-        material.base_color_texture = at(MapKind::BaseColor);
-        material.normal_map_texture = at(MapKind::Normal);
-        material.occlusion_texture = at(MapKind::Orm);
-        material.metallic_roughness_texture = at(MapKind::Orm);
-        material.emissive_texture = at(MapKind::Emissive);
-        material.specular_transmission_texture = at(MapKind::Transmission);
-        material.thickness_texture = at(MapKind::Transmission);
-        material.diffuse_transmission_texture = at(MapKind::Transmission);
-        material.specular_tint_texture = at(MapKind::Specular);
-        material.specular_texture = at(MapKind::Specular);
-        material.clearcoat_texture = at(MapKind::Clearcoat);
-        material.clearcoat_roughness_texture = at(MapKind::Clearcoat);
-        material.clearcoat_normal_texture = at(MapKind::ClearcoatNormal);
-        material.anisotropy_texture = at(MapKind::Anisotropy);
-        material.depth_map = at(MapKind::Depth);
+        bind_maps(&mut material, at);
     }
+}
+
+/// Points every texture slot of `material` at the map `at` answers for it.
+///
+/// One map serves several slots where Bevy reads different channels of the same
+/// packed map — occlusion and metallic-roughness both come from the ORM map, and
+/// all three transmission slots from the transmission map.
+pub fn bind_maps(material: &mut StandardMaterial, at: impl Fn(MapKind) -> Option<Handle<Image>>) {
+    material.base_color_texture = at(MapKind::BaseColor);
+    material.normal_map_texture = at(MapKind::Normal);
+    material.occlusion_texture = at(MapKind::Orm);
+    material.metallic_roughness_texture = at(MapKind::Orm);
+    material.emissive_texture = at(MapKind::Emissive);
+    material.specular_transmission_texture = at(MapKind::Transmission);
+    material.thickness_texture = at(MapKind::Transmission);
+    material.diffuse_transmission_texture = at(MapKind::Transmission);
+    material.specular_tint_texture = at(MapKind::Specular);
+    material.specular_texture = at(MapKind::Specular);
+    material.clearcoat_texture = at(MapKind::Clearcoat);
+    material.clearcoat_roughness_texture = at(MapKind::Clearcoat);
+    material.clearcoat_normal_texture = at(MapKind::ClearcoatNormal);
+    material.anisotropy_texture = at(MapKind::Anisotropy);
+    material.depth_map = at(MapKind::Depth);
 }

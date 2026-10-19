@@ -15,6 +15,7 @@ bevy = { version = "0.20", features = [
     "pbr_specular_textures",
     "pbr_anisotropy_texture",
     "pbr_multi_layer_material_textures",
+    "system_clipboard",
 ] }
 half = "2"
 image = { version = "0.24", default-features = false, features = ["png"] }

@@ -4,6 +4,7 @@
 pub mod map_view;
 pub mod params_panel;
 
+use bevy::clipboard::Clipboard;
 use bevy::feathers::constants::size;
 use bevy::feathers::controls::ButtonVariant;
 use bevy::feathers::focus::FocusIndicator;
@@ -67,6 +68,11 @@ pub struct ExportResButton(pub u32);
 /// Activating it requests an export of the current maps.
 #[derive(Component, Debug)]
 pub struct ExportButton;
+
+/// Activating it copies the Rust that builds the active material from its
+/// exported maps to the system clipboard.
+#[derive(Component, Debug)]
+pub struct CopyCodeButton;
 
 /// Activating it toggles animation.
 #[derive(Component, Debug)]
@@ -323,6 +329,7 @@ fn spawn_ui(
             ));
         }
         bar.spawn(small_button("Export PNGs", ExportButton));
+        bar.spawn(small_button("Copy code", CopyCodeButton));
         bar.spawn(small_button("animate", AnimateButton));
         bar.spawn(small_button("turntable", TurntableButton));
     });
@@ -500,6 +507,7 @@ fn spawn_ui(
     commands.add_observer(slider_self_update);
     commands.add_observer(on_select);
     commands.add_observer(on_setting);
+    commands.add_observer(on_copy_code);
     commands.add_observer(on_value_change);
 }
 
@@ -667,6 +675,27 @@ fn on_setting(
     }
     if turntables.get(entity).is_ok() {
         settings.turntable = !settings.turntable;
+    }
+}
+
+fn on_copy_code(
+    event: On<Activate>,
+    buttons: Query<&CopyCodeButton>,
+    catalog: Res<MaterialCatalog>,
+    mut clipboard: ResMut<Clipboard>,
+) {
+    if buttons.get(event.event().entity).is_err() {
+        return;
+    }
+    let Some(active) = catalog.active() else {
+        return;
+    };
+    match clipboard.set_text(crate::codegen::material_code(&active.name)) {
+        Ok(()) => info!("copied the code for {} to the clipboard", active.name),
+        Err(error) => warn!(
+            "the clipboard refused the code for {}: {error:?}",
+            active.name
+        ),
     }
 }
 
