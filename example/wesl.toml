@@ -1,6 +1,6 @@
-# A material project as any consumer of the editor would set one up.
+# A material project. Where `bevy_pbr_generator init` points the dependency at
+# a copy of the package, this one points at the package in this repo.
 edition = "2026_pre"
-package-manager = "cargo"
 root = "shaders"
 
 [dependencies]

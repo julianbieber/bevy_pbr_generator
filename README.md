@@ -4,50 +4,65 @@ An interactive editor in which each PBR map is produced by a WGSL compute
 shader, materials hot-reload from disk, and the result is previewed live on a lit
 3D mesh.
 
-TODO(jb-doc): prose.
+## Using it from your project
 
-## Running
+Materials live in the project that needs the textures, not here. Install the
+two binaries into that project with [mise](https://mise.jdx.dev). Every push to
+`main` that passes CI is tagged `v0.<n>`, counting up from `v0.1`; pin one of
+those tags by running this in the project:
 
 ```bash
-just run                          # opens the editor on example/
-just run ../my_game               # opens it on another material project
-just new-material ../my_game slate   # scaffolds <package root>/slate.wesl there
-just combine output/water output/rocky   # packs exports into output/combined
-just check                        # build + clippy, the gate a change has to pass
-just test
+mise use "cargo:https://github.com/julianbieber/bevy_pbr_generator@tag:v0.x"
 ```
 
+mise builds it from source with `cargo install`, so bevy's native build
+dependencies have to be present. It records the pin in the project's
+`mise.toml` and puts `bevy_pbr_generator` and `bevy_pbr_combine` on the `PATH` inside
+the project (with `mise activate` in your shell; otherwise prefix the commands
+with `mise exec --`). Nothing is added to the project's `Cargo.toml`: the game depends on
+the exported PNGs, not on this crate.
+
+Then, from the project:
+
+```bash
+bevy_pbr_generator init materials           # make materials/ a material project
+bevy_pbr_generator new slate materials      # write materials/shaders/slate.wesl
+bevy_pbr_generator materials                # open the editor on it
+bevy_pbr_combine output/water output/rocky  # pack exports into output/combined
+```
+
+Every directory argument defaults to the current one, so inside `materials/`
+these are `bevy_pbr_generator init`, `bevy_pbr_generator new slate` and
+`bevy_pbr_generator`. The editor writes exports to `output/` under the
+directory it was started from.
+
 Edit a material, or any module it imports, while the editor is open: it
-recompiles and re-renders without a restart. Edits to this package's own modules
-are picked up only under `just run`, which is what tells bevy where the source is. A shader that fails to compile
+recompiles and re-renders without a restart. A shader that fails to compile
 leaves the previous maps on screen and puts the error in the status bar. A
 material file added while the editor is open is listed after a restart.
 
-## Using it from your project
+### The material project
 
-Materials live in the project that needs the textures, not here. This repo
-provides the WESL package `bevy_pbr_generator`, which those materials import,
-and a template to start from.
-
-A material project is any directory with a `wesl.toml`. Point its dependency at
-this checkout so wgsl-analyzer resolves the package:
+A material project is any directory with a `wesl.toml`. `init` writes one when
+there is none, and copies the WESL package `bevy_pbr_generator`, which materials
+import, into a `bevy_pbr_generator/` directory beside it:
 
 ```toml
 edition = "2026_pre"
-package-manager = "cargo"
 root = "shaders"
 
 [dependencies]
-bevy_pbr_generator = { path = "../bevy_pbr_generator" }
+bevy_pbr_generator = { path = "bevy_pbr_generator" }
 ```
 
-`just run <dir>` opens the editor on it. The editor reads the same `wesl.toml`
-with the same rules the language server applies — `root`, `include` and
-`exclude` — so `package::` means the same thing in both. A few limits follow
-from that:
+The editor reads the same `wesl.toml` with the same rules the language server
+(wgsl-analyzer) applies — `root`, `include` and `exclude` — so `package::`
+means the same thing in both. A few limits follow from that:
 
-- The editor embeds the package it was built from. The language server reads the
-  checkout the `path` names; keep them the same checkout.
+- The editor runs the package it was built with; the language server reads the
+  copy the `path` names. After moving the pin to another tag, run
+  `bevy_pbr_generator init` again: it refreshes the copy and leaves an existing `wesl.toml` alone. The
+  editor warns at startup when the two differ.
 - `bevy_pbr_generator` is the only dependency the editor provides, under that
   name. A material importing any other package will not compile, and the editor
   warns at startup about every other dependency `wesl.toml` lists.
@@ -56,29 +71,8 @@ from that:
 - The editor watches the whole package root, so keep it to shaders.
 
 `example/` is such a project, holding the template and two example materials.
+Its dependency points at this repo's `src/shaders` instead of a copy.
 
-### Pinning it with mise
-
-Every push to `main` that passes CI is tagged `v0.<n>`, counting up from
-`v0.1`. To pin a project to one of those tags, run this in the project:
-
-```bash
-mise use "cargo:https://github.com/julianbieber/bevy_pbr_generator@tag:v0.1"
-```
-
-mise builds it from source with `cargo install`, so bevy's native build
-dependencies have to be present. That puts both binaries on the project's
-`PATH`:
-
-```bash
-bevy_pbr_generator .               # the editor, on the project in this directory
-combine output/water output/rocky  # the same as `just combine`
-```
-
-An installed editor has no `example/` to fall back on, so it needs the project
-directory passed explicitly. The `path` in `wesl.toml` still has to name a
-checkout of this repo, at the same tag as the one mise installed, for the
-language server to agree with the editor.
 
 ## Writing a material
 
@@ -187,9 +181,10 @@ editor, so paste before closing it.
 
 ## Combining materials
 
-`just combine [-o <dir>] <material folder>...` packs several exported materials
+`bevy_pbr_combine [-o <dir>] <material folder>...` packs several exported materials
 into one image per map, so a single mesh can give each region its own material
-by UV. The output defaults to `output/combined/` and holds the same ten
+by UV. The output defaults to `output/combined/`, relative to the current
+directory, and holds the same ten
 `<map>.png` names as an export, plus `atlas.json`.
 
 Materials are placed left to right in the order given, each in a square cell the
@@ -223,6 +218,24 @@ the same name, or `-o` pointing at one of the inputs stops the combine before
 anything is written; a failure while writing leaves the output directory as it
 was.
 
+## Developing it
+
+The `Justfile` is for working on this repo. Its recipes build from source and
+take the same arguments as the installed binaries, resolved against the
+directory `just` is called from:
+
+```bash
+just run                                 # opens the editor on example/
+just run ../my_game/materials            # opens it on another material project
+just new-material slate                  # writes example/shaders/slate.wesl
+just combine output/water output/rocky   # runs bevy_pbr_combine
+just check                               # build + clippy, the gate a change has to pass
+just test
+```
+
+Edits to this package's own modules, `src/shaders`, hot-reload only under
+`just run`, which is what tells bevy where the source is.
+
 ## Layout
 
 | Path | Role |
@@ -230,7 +243,8 @@ was.
 | `src/shaders/pbr_maps.wesl` | `bevy_pbr_generator::pbr_maps`: `Surface` and channel packing; group-0 bindings |
 | `src/shaders/noise.wesl` | `bevy_pbr_generator::noise`: the noise primitives materials sample |
 | `src/shaders/mod.rs` | embedding of the package, and the entry module written for each material |
-| `wesl.toml` | the package's root, for the language server of a material project |
+| `wesl.toml` | the package's root, for the language server of `example/` |
+| `src/scaffold.rs` | `init` and `new`: the package copy and the material template |
 | `example/` | a material project: the template and the example materials |
 | `src/ui/map_view.wesl` | channel masking for the map thumbnails |
 | `src/material/project.rs` | the material project the editor is opened on |
@@ -240,7 +254,7 @@ was.
 | `src/gpu/dispatch.rs` | generation-gated dispatch, pipeline status |
 | `src/gpu/export.rs` | readback and PNG encode |
 | `src/codegen.rs` | the Rust **Copy code** puts on the clipboard |
-| `src/bin/combine/` | the `combine` CLI: layout, compose, manifest |
+| `src/bin/bevy_pbr_combine/` | the `bevy_pbr_combine` CLI: layout, compose, manifest |
 | `src/app/` | camera, preview mesh, sun |
 | `src/ui/` | the editor shell and the data-driven parameter panel |
 

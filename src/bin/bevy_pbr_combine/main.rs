@@ -1,4 +1,4 @@
-//! `combine`: packs material export folders into one image per map, so a
+//! `bevy_pbr_combine`: packs material export folders into one image per map, so a
 //! single mesh can address each material through its own UV region.
 
 mod compose;
@@ -17,7 +17,7 @@ use crate::layout::Layout;
 const SIZE_LIMIT: u32 = 8192;
 const DEFAULT_OUTPUT: &str = "output/combined";
 const MANIFEST: &str = "atlas.json";
-const USAGE: &str = "usage: combine [-o <dir>] <material folder>...
+const USAGE: &str = "usage: bevy_pbr_combine [-o <dir>] <material folder>...
 
 Combines material export folders, left to right in the order given, into one
 PNG per map plus atlas.json. Defaults to -o output/combined.";
@@ -125,7 +125,7 @@ fn main() -> ExitCode {
     let command = match parse_args(std::env::args_os().skip(1)) {
         Ok(command) => command,
         Err(error) => {
-            eprintln!("combine: {error}\n\n{USAGE}");
+            eprintln!("bevy_pbr_combine: {error}\n\n{USAGE}");
             return ExitCode::from(2);
         }
     };
@@ -142,7 +142,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("combine: {error}");
+            eprintln!("bevy_pbr_combine: {error}");
             ExitCode::FAILURE
         }
     }
