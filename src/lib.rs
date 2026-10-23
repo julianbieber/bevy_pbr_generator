@@ -7,6 +7,7 @@ pub mod app;
 pub mod codegen;
 pub mod gpu;
 pub mod material;
+pub mod scaffold;
 pub mod shaders;
 pub mod status;
 pub mod ui;
