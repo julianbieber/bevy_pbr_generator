@@ -6,23 +6,20 @@ use bevy::prelude::*;
 use bevy::scene::ScenePlugin;
 use bevy_pbr_generator::app::preview::{bind_maps, preview_material};
 use bevy_pbr_generator::codegen::material_code;
+use bevy_pbr_generator::map_file::MapFormat;
 
 mod generated {
     include!("generated/material_golden_2.rs");
 }
 
-// The checked-in copy is what cargo compiles, so it has to be exactly what the
-// editor copies; a change to the output then shows up as a reviewable diff.
 #[test]
 fn generated_code_matches_the_checked_in_copy() {
     assert_eq!(
-        material_code("Golden 2"),
+        material_code("Golden 2", MapFormat::Ktx2),
         include_str!("generated/material_golden_2.rs")
     );
 }
 
-// The pasted material has to equal the preview's, slot for slot and factor for
-// factor, so a game shows what the editor showed.
 #[test]
 fn spawned_material_matches_the_preview() {
     let mut app = App::new();
@@ -48,7 +45,7 @@ fn spawned_material_matches_the_preview() {
     let server = world.resource::<AssetServer>();
     let mut expected = preview_material();
     bind_maps(&mut expected, |kind| {
-        Some(server.load(format!("golden_2/{}.png", kind.file_stem())))
+        Some(server.load(format!("golden_2/{}.ktx2", kind.file_stem())))
     });
 
     for (index, (name, field)) in expected.iter_fields().enumerate() {
@@ -69,4 +66,11 @@ fn spawned_material_matches_the_preview() {
             }
         }
     }
+}
+
+#[test]
+fn png_mode_loads_the_png_files() {
+    let code = material_code("Golden 2", MapFormat::Png);
+    assert!(code.contains("golden_2/base_color.png"));
+    assert!(!code.contains(".ktx2"));
 }

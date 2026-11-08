@@ -6,6 +6,9 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
 use bevy_pbr_generator::gpu::maps::{MapKind, MAP_COUNT};
+use bevy_pbr_generator::map_file::{
+    atlas_chain_levels, decode_ktx2, encode_ktx2, ktx2_size, MapFormat,
+};
 use image::codecs::png::PngDecoder;
 use image::imageops::{self, FilterType};
 use image::{ColorType, ImageDecoder, ImageFormat, RgbaImage};
@@ -19,19 +22,23 @@ pub struct Material {
     pub name: String,
     /// Canonical path, so two spellings of one folder compare equal.
     pub folder: PathBuf,
+    pub format: MapFormat,
     /// Side length of each map, in `MapKind::ALL` order.
     pub sizes: [u32; MAP_COUNT],
 }
 
-/// Checks every folder from its PNG headers alone, in the order given.
+/// Checks every folder from its file headers alone, in the order given.
 ///
-/// A material is named after its folder's final path component, resolved
+/// A folder is read as KTX2 when it holds any `.ktx2` map and as PNG otherwise. A
+/// material is named after its folder's final path component, resolved
 /// through the filesystem so `.` and trailing slashes name the real folder.
 /// Nothing is decoded, so this is cheap however large the maps are.
 ///
 /// Errors with `FolderNotFound`, `UnusableName` when the final component is
-/// missing or not UTF-8, `DuplicateName` when two folders share a name, and
-/// for each map `MissingMap`, `Unreadable`, `NotRgba8` or `NotSquare`.
+/// missing or not UTF-8, `DuplicateName` when two folders share a name,
+/// `BothFormats` when one folder holds both formats, `MixedFormats` when two
+/// folders differ, and for each map `MissingMap`, `Unreadable`, `NotSquare`, and
+/// `NotRgba8` for a PNG or `UnusableKtx2Side` for a KTX2 file.
 pub fn inspect(folders: &[PathBuf]) -> Result<Vec<Material>, CombineError> {
     let mut materials: Vec<Material> = Vec::with_capacity(folders.len());
     for folder in folders {
@@ -46,21 +53,69 @@ pub fn inspect(folders: &[PathBuf]) -> Result<Vec<Material>, CombineError> {
         if materials.iter().any(|material| material.name == name) {
             return Err(CombineError::DuplicateName(name));
         }
+        let format = folder_format(&folder)?;
+        if let Some(other) = materials.iter().find(|other| other.format != format) {
+            let (ktx2, png) = match format {
+                MapFormat::Ktx2 => (name, other.name.clone()),
+                MapFormat::Png => (other.name.clone(), name),
+            };
+            return Err(CombineError::MixedFormats { ktx2, png });
+        }
         let mut sizes = [0; MAP_COUNT];
         for (size, kind) in sizes.iter_mut().zip(MapKind::ALL) {
-            *size = map_size(&folder, kind)?;
+            *size = match format {
+                MapFormat::Ktx2 => ktx2_map_size(&folder, kind)?,
+                MapFormat::Png => png_map_size(&folder, kind)?,
+            };
         }
         materials.push(Material {
             name,
             folder,
+            format,
             sizes,
         });
     }
     Ok(materials)
 }
 
-fn map_size(folder: &Path, kind: MapKind) -> Result<u32, CombineError> {
-    let file = map_path(folder, kind);
+fn folder_format(folder: &Path) -> Result<MapFormat, CombineError> {
+    let holds = |format| {
+        MapKind::ALL
+            .iter()
+            .any(|kind| map_path(folder, *kind, format).exists())
+    };
+    match (holds(MapFormat::Ktx2), holds(MapFormat::Png)) {
+        (true, true) => Err(CombineError::BothFormats(folder.to_path_buf())),
+        (true, false) => Ok(MapFormat::Ktx2),
+        (false, _) => Ok(MapFormat::Png),
+    }
+}
+
+fn ktx2_map_size(folder: &Path, kind: MapKind) -> Result<u32, CombineError> {
+    let file = map_path(folder, kind, MapFormat::Ktx2);
+    let bytes = std::fs::read(&file).map_err(|_| CombineError::MissingMap {
+        folder: folder.to_path_buf(),
+        file: file.clone(),
+    })?;
+    let (width, height) = ktx2_size(&bytes).map_err(|reason| CombineError::Unreadable {
+        file: file.clone(),
+        reason,
+    })?;
+    if width != height {
+        return Err(CombineError::NotSquare {
+            file,
+            width,
+            height,
+        });
+    }
+    if !width.is_power_of_two() || width < 4 {
+        return Err(CombineError::UnusableKtx2Side { file, side: width });
+    }
+    Ok(width)
+}
+
+fn png_map_size(folder: &Path, kind: MapKind) -> Result<u32, CombineError> {
+    let file = map_path(folder, kind, MapFormat::Png);
     let reader = File::open(&file).map_err(|_| CombineError::MissingMap {
         folder: folder.to_path_buf(),
         file: file.clone(),
@@ -85,8 +140,8 @@ fn map_size(folder: &Path, kind: MapKind) -> Result<u32, CombineError> {
     Ok(width)
 }
 
-fn map_path(folder: &Path, kind: MapKind) -> PathBuf {
-    folder.join(format!("{}.png", kind.file_stem()))
+fn map_path(folder: &Path, kind: MapKind, format: MapFormat) -> PathBuf {
+    folder.join(format!("{}.{}", kind.file_stem(), format.extension()))
 }
 
 /// The cell size every map is brought to: the largest map of any material, or
@@ -126,18 +181,30 @@ pub fn compose(
 ) -> Result<RgbaImage, CombineError> {
     let mut canvas = RgbaImage::new(layout.width(), layout.height());
     for (index, material) in materials.iter().enumerate() {
-        let file = map_path(&material.folder, kind);
-        let map = image::open(&file)
-            .map_err(|error| CombineError::Unreadable {
-                file: file.clone(),
-                reason: error.to_string(),
-            })?
-            .into_rgba8();
-        let map = fit(map, layout.cell);
+        let map = fit(read_map(material, kind)?, layout.cell);
         let (x, y) = layout.origin(index);
         place(&mut canvas, &map, x, y);
     }
     Ok(canvas)
+}
+
+fn read_map(material: &Material, kind: MapKind) -> Result<RgbaImage, CombineError> {
+    let file = map_path(&material.folder, kind, material.format);
+    let unreadable = |reason: String| CombineError::Unreadable {
+        file: file.clone(),
+        reason,
+    };
+    match material.format {
+        MapFormat::Png => image::open(&file)
+            .map(|map| map.into_rgba8())
+            .map_err(|error| unreadable(error.to_string())),
+        MapFormat::Ktx2 => {
+            let bytes = std::fs::read(&file).map_err(|error| unreadable(error.to_string()))?;
+            let (width, height, rgba) = decode_ktx2(kind, &bytes).map_err(unreadable)?;
+            RgbaImage::from_raw(width, height, rgba)
+                .ok_or_else(|| unreadable("the largest level is not its stated size".to_string()))
+        }
+    }
 }
 
 fn fit(map: RgbaImage, cell: u32) -> RgbaImage {
@@ -160,8 +227,9 @@ fn place(canvas: &mut RgbaImage, map: &RgbaImage, x: u32, y: u32) {
     }
 }
 
-/// Writes one combined PNG per map kind and the manifest into `output`,
-/// creating the directory if needed.
+/// Writes one combined file per map kind and the manifest into `output`,
+/// creating the directory if needed. The files are in the format of `materials`;
+/// KTX2 files carry a chain that ends before a cell falls under 16 texels.
 ///
 /// Every file goes to a `.tmp` sibling first and is renamed into place only
 /// once all of them were written. A decode or write failure before the renames
@@ -208,15 +276,14 @@ fn stage(
 ) -> Result<(), CombineError> {
     for kind in MapKind::ALL {
         let canvas = compose(kind, materials, layout)?;
-        let file = output.join(format!("{}.png", kind.file_stem()));
+        let format = materials
+            .first()
+            .map_or(MapFormat::default(), |material| material.format);
+        let file = map_path(output, kind, format);
         let temporary = temporary_path(&file);
         staged.push((temporary.clone(), file.clone()));
-        canvas
-            .save_with_format(&temporary, ImageFormat::Png)
-            .map_err(|error| CombineError::WriteFailed {
-                file,
-                reason: error.to_string(),
-            })?;
+        write_canvas(canvas, kind, format, layout.cell, &temporary)
+            .map_err(|reason| CombineError::WriteFailed { file, reason })?;
     }
     let file = output.join(manifest_name);
     let temporary = temporary_path(&file);
@@ -225,6 +292,31 @@ fn stage(
         file,
         reason: error.to_string(),
     })
+}
+
+fn write_canvas(
+    canvas: RgbaImage,
+    kind: MapKind,
+    format: MapFormat,
+    cell: u32,
+    file: &Path,
+) -> Result<(), String> {
+    match format {
+        MapFormat::Png => canvas
+            .save_with_format(file, ImageFormat::Png)
+            .map_err(|error| error.to_string()),
+        MapFormat::Ktx2 => {
+            let (width, height) = canvas.dimensions();
+            let bytes = encode_ktx2(
+                kind,
+                width,
+                height,
+                canvas.into_raw(),
+                atlas_chain_levels(cell),
+            )?;
+            std::fs::write(file, bytes).map_err(|error| error.to_string())
+        }
+    }
 }
 
 fn commit(staged: &[(PathBuf, PathBuf)]) -> Result<(), CombineError> {
@@ -265,13 +357,12 @@ pub mod tests {
         std::fs::create_dir_all(&folder).unwrap();
         for kind in MapKind::ALL {
             RgbaImage::from_pixel(size, size, Rgba(colour))
-                .save(map_path(&folder, kind))
+                .save(map_path(&folder, kind, MapFormat::Png))
                 .unwrap();
         }
         folder
     }
 
-    // A map copied into a cell must land at the cell's origin and nowhere else.
     #[test]
     fn place_copies_into_the_cell_only() {
         let mut canvas = RgbaImage::new(4, 2);
@@ -282,7 +373,6 @@ pub mod tests {
         assert_eq!(canvas.get_pixel(3, 1), &Rgba([9, 8, 7, 6]));
     }
 
-    // Maps already at the cell size are copied verbatim; only smaller ones are resampled.
     #[test]
     fn fit_resizes_only_smaller_maps() {
         let map = RgbaImage::from_pixel(2, 2, Rgba([1, 2, 3, 4]));
@@ -292,7 +382,6 @@ pub mod tests {
         assert_eq!(grown.get_pixel(4, 4), &Rgba([1, 2, 3, 4]));
     }
 
-    // The folder name is the material name, and a missing map names its folder and file.
     #[test]
     fn inspect_names_materials_and_reports_missing_maps() {
         let root = scratch("inspect");
@@ -308,7 +397,6 @@ pub mod tests {
         }
     }
 
-    // Two folders with the same final name would be indistinguishable in the manifest.
     #[test]
     fn duplicate_folder_names_are_refused() {
         let root = scratch("duplicate");
@@ -320,7 +408,6 @@ pub mod tests {
         ));
     }
 
-    // Export only ever writes square RGBA8 maps; anything else is refused before decoding.
     #[test]
     fn non_square_and_non_rgba8_maps_are_refused() {
         let root = scratch("formats");
@@ -343,7 +430,6 @@ pub mod tests {
         ));
     }
 
-    // Writing into an input folder would overwrite that material's own maps.
     #[test]
     fn output_inside_an_input_folder_is_refused() {
         let root = scratch("output-is-input");
@@ -356,7 +442,6 @@ pub mod tests {
         assert!(check_output(&root.join("combined"), &materials).is_ok());
     }
 
-    // A failure part-way leaves no staged files and no partial set in the output.
     #[test]
     fn failed_decode_writes_nothing() {
         let root = scratch("atomic");
@@ -367,5 +452,72 @@ pub mod tests {
         let layout = Layout::place(1, 2, 8192).unwrap();
         assert!(write_all(&output, &materials, &layout, "atlas.json", "{}").is_err());
         assert_eq!(std::fs::read_dir(&output).unwrap().count(), 0);
+    }
+
+    fn ktx2_folder(parent: &Path, name: &str, side: u32, colour: [u8; 4]) -> PathBuf {
+        let folder = parent.join(name);
+        std::fs::create_dir_all(&folder).unwrap();
+        let levels = bevy_pbr_generator::map_file::full_chain_levels(side);
+        for kind in MapKind::ALL {
+            let rgba = colour.repeat((side * side) as usize);
+            let bytes = encode_ktx2(kind, side, side, rgba, levels).unwrap();
+            std::fs::write(map_path(&folder, kind, MapFormat::Ktx2), bytes).unwrap();
+        }
+        folder
+    }
+
+    #[test]
+    fn a_folder_reads_as_the_format_it_holds() {
+        let root = scratch("format");
+        let water = ktx2_folder(&root, "water", 8, [0, 0, 255, 255]);
+        let rocky = export_folder(&root, "rocky", 8, [9, 9, 9, 255]);
+        let read = |folder: &PathBuf| inspect(std::slice::from_ref(folder)).unwrap()[0].format;
+        assert_eq!(read(&water), MapFormat::Ktx2);
+        assert_eq!(read(&rocky), MapFormat::Png);
+    }
+
+    #[test]
+    fn a_folder_with_both_formats_is_refused() {
+        let root = scratch("both");
+        let water = ktx2_folder(&root, "water", 8, [0, 0, 255, 255]);
+        RgbaImage::new(8, 8).save(water.join("orm.png")).unwrap();
+        assert!(matches!(
+            inspect(&[water]),
+            Err(CombineError::BothFormats(_))
+        ));
+    }
+
+    #[test]
+    fn folders_of_different_formats_are_refused() {
+        let root = scratch("mixed");
+        let water = ktx2_folder(&root, "water", 8, [0, 0, 255, 255]);
+        let rocky = export_folder(&root, "rocky", 8, [9, 9, 9, 255]);
+        assert!(matches!(
+            inspect(&[rocky, water]),
+            Err(CombineError::MixedFormats { ktx2, png }) if ktx2 == "water" && png == "rocky"
+        ));
+    }
+
+    #[test]
+    fn a_ktx2_folder_missing_a_map_names_it() {
+        let root = scratch("ktx2-missing");
+        let water = ktx2_folder(&root, "water", 8, [0, 0, 255, 255]);
+        std::fs::remove_file(water.join("orm.ktx2")).unwrap();
+        match inspect(&[water]) {
+            Err(CombineError::MissingMap { file, .. }) => assert!(file.ends_with("orm.ktx2")),
+            other => panic!("expected MissingMap, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn png_inputs_write_png_and_no_ktx2() {
+        let root = scratch("png-out");
+        let rocky = export_folder(&root, "rocky", 8, [9, 9, 9, 255]);
+        let materials = inspect(&[rocky]).unwrap();
+        let output = root.join("combined");
+        let layout = Layout::place(1, 8, 8192).unwrap();
+        write_all(&output, &materials, &layout, "atlas.json", "{}").unwrap();
+        assert!(output.join("orm.png").exists());
+        assert!(!output.join("orm.ktx2").exists());
     }
 }

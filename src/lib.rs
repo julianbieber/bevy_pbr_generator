@@ -6,6 +6,7 @@
 pub mod app;
 pub mod codegen;
 pub mod gpu;
+pub mod map_file;
 pub mod material;
 pub mod scaffold;
 pub mod shaders;

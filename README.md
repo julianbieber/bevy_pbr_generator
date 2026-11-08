@@ -20,7 +20,7 @@ dependencies have to be present. It records the pin in the project's
 `mise.toml` and puts `bevy_pbr_generator` and `bevy_pbr_combine` on the `PATH` inside
 the project (with `mise activate` in your shell; otherwise prefix the commands
 with `mise exec --`). Nothing is added to the project's `Cargo.toml`: the game depends on
-the exported PNGs, not on this crate.
+the exported textures, not on this crate.
 
 Then, from the project:
 
@@ -128,7 +128,7 @@ error, reported in the status bar; the previously parsed parameters stay in use.
 | `// @group <Name>` on its own line | — | starts a section |
 
 A `color` annotation is written in sRGB and stored linear: the whole pipeline is
-linear, and the transfer function is applied once, at PNG encode time.
+linear, and the transfer function is applied once, when a map is exported.
 
 ## The map set
 
@@ -157,8 +157,29 @@ derived in [BEVY_STANDARD_MATERIAL_TEXTURE_PACKING.md](BEVY_STANDARD_MATERIAL_TE
 ## Export
 
 The export button generates a second map set at the export resolution, reads it
-back, and writes `<output>/<material>/<map>.png`. Preview and export resolutions
-are independent, so the preview can stay cheap while parameters are dialled in.
+back, and writes `<output>/<material>/<map>.<extension>`. Preview and export
+resolutions are independent, so the preview can stay cheap while parameters are
+dialled in. Encoding carries on in the background after the button returns, and
+each finished file is logged.
+
+The `ktx2` and `png` buttons pick the format; `ktx2` is the default.
+
+| Format | Levels | Compression |
+|---|---|---|
+| `ktx2` | a chain down to 1x1, each level the 2x2 average of the one above | zstd over BC blocks, below |
+| `png` | one | none on the GPU; a game generates its own mips |
+
+| Block format | Maps |
+|---|---|
+| BC7 | `base_color`, `emissive`, `specular` (sRGB); `orm`, `transmission`, `anisotropy` (linear) |
+| BC5 | `normal`, `clearcoat_normal`, `clearcoat`: red and green only |
+| BC4 | `depth`: red only |
+
+BC textures load only on GPUs that support them, which Bevy describes as typically
+desktop GPUs; elsewhere the load fails. A shader reading `.z` from a BC5 normal map
+gets 0: `StandardMaterial` derives it. Bevy's default features can load these
+files; a game with `default-features = false` adds `ktx2` and `zstd_rust` or
+`zstd_c`.
 
 ### Using an export in a game
 
@@ -173,7 +194,8 @@ mesh:
 commands.spawn_scene(material_rocky()).insert(Mesh3d(mesh));
 ```
 
-The code binds all ten maps, so the project needs bevy's
+The code loads the format currently selected in the editor, so copy it with the
+same format selected as the export. It binds all ten maps, so the project needs bevy's
 `pbr_transmission_textures`, `pbr_specular_textures`, `pbr_anisotropy_texture`
 and `pbr_multi_layer_material_textures` features, or the slots it does not use
 removed. The mesh needs tangents. On X11 the clipboard is served by the
@@ -184,8 +206,13 @@ editor, so paste before closing it.
 `bevy_pbr_combine [-o <dir>] <material folder>...` packs several exported materials
 into one image per map, so a single mesh can give each region its own material
 by UV. The output defaults to `output/combined/`, relative to the current
-directory, and holds the same ten
-`<map>.png` names as an export, plus `atlas.json`.
+directory, and holds the same ten map names as an export, plus `atlas.json`.
+
+The output has the format of the inputs: PNG folders give PNGs, KTX2 folders give
+KTX2. KTX2 inputs are decoded and encoded again, so a combined map is compressed
+twice. Its mip chain is built per cell and ends before a cell falls under 16
+texels, 8 levels for 2048px cells. An earlier combine's files in the other format
+are left in the output directory.
 
 Materials are placed left to right in the order given, each in a square cell the
 size of the largest input map; smaller maps are resized up with Lanczos3. If the
@@ -209,13 +236,14 @@ its export had.
 `v = 0` is the top edge. The same folders in the same order always produce the
 same regions; adding a material, or changing the largest resolution, moves them.
 
-Cells have no padding. Filtering and mipmaps blend neighbouring materials at a
-shared edge, and empty grid cells are transparent black, so keeping UVs clear of
+Cells have no padding. Filtering blends neighbouring materials at a shared edge,
+at every mip level, and empty grid cells are transparent black, so keeping UVs clear of
 region borders is the consumer's job.
 
-A folder missing a map, a map that is not square 8-bit RGBA, two folders with
-the same name, or `-o` pointing at one of the inputs stops the combine before
-anything is written; a failure while writing leaves the output directory as it
+A folder missing a map, a PNG that is not square 8-bit RGBA, a KTX2 map that is not
+square with a power-of-two side, a folder holding both formats, folders of
+different formats, two folders with the same name, or `-o` pointing at one of the
+inputs stops the combine before anything is written; a failure while writing leaves the output directory as it
 was.
 
 ## Developing it
@@ -252,7 +280,8 @@ Edits to this package's own modules, `src/shaders`, hot-reload only under
 | `src/material/catalog.rs` | what is on disk and which of it is being edited |
 | `src/gpu/pipeline.rs` | per-material compute pipeline and bind groups |
 | `src/gpu/dispatch.rs` | generation-gated dispatch, pipeline status |
-| `src/gpu/export.rs` | readback and PNG encode |
+| `src/gpu/export.rs` | readback and writing a map file |
+| `src/map_file.rs` | the map file formats: KTX2 encode and decode, mip chains |
 | `src/codegen.rs` | the Rust **Copy code** puts on the clipboard |
 | `src/bin/bevy_pbr_combine/` | the `bevy_pbr_combine` CLI: layout, compose, manifest |
 | `src/app/` | camera, preview mesh, sun |

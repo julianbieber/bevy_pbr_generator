@@ -20,7 +20,8 @@ const MANIFEST: &str = "atlas.json";
 const USAGE: &str = "usage: bevy_pbr_combine [-o <dir>] <material folder>...
 
 Combines material export folders, left to right in the order given, into one
-PNG per map plus atlas.json. Defaults to -o output/combined.";
+file per map plus atlas.json, in the format the folders hold: KTX2 with a mip
+chain, or PNG. Defaults to -o output/combined.";
 
 /// Everything that stops a combine. Each variant names the path or value at
 /// fault.
@@ -52,6 +53,15 @@ pub enum CombineError {
         count: usize,
         cell: u32,
         limit: u32,
+    },
+    BothFormats(PathBuf),
+    MixedFormats {
+        ktx2: String,
+        png: String,
+    },
+    UnusableKtx2Side {
+        file: PathBuf,
+        side: u32,
     },
     OutputIsInput(PathBuf),
     WriteFailed {
@@ -96,6 +106,20 @@ impl fmt::Display for CombineError {
             Self::TooLarge { count, cell, limit } => write!(
                 f,
                 "{count} materials at {cell}px do not fit in {limit}x{limit}"
+            ),
+            Self::BothFormats(folder) => write!(
+                f,
+                "material folder {} holds both KTX2 and PNG maps; remove one set",
+                folder.display()
+            ),
+            Self::MixedFormats { ktx2, png } => write!(
+                f,
+                "material {ktx2:?} is KTX2 and {png:?} is PNG; a combine reads one format"
+            ),
+            Self::UnusableKtx2Side { file, side } => write!(
+                f,
+                "{} is {side}px; a KTX2 map must be a power of two of at least 4",
+                file.display()
             ),
             Self::OutputIsInput(folder) => write!(
                 f,
@@ -257,7 +281,6 @@ mod tests {
         parse_args(list.iter().map(OsString::from))
     }
 
-    // Folders are kept in the order given, since that order fixes every UV region.
     #[test]
     fn parses_folders_in_order_with_default_output() {
         assert_eq!(
@@ -273,7 +296,6 @@ mod tests {
         ));
     }
 
-    // Malformed command lines are usage errors, not silently ignored flags.
     #[test]
     fn rejects_malformed_command_lines() {
         assert!(matches!(args(&[]), Err(CombineError::NoMaterials)));
@@ -292,14 +314,12 @@ mod tests {
         assert_eq!(args(&["water", "--help"]).unwrap(), Command::Help);
     }
 
-    // Folder names reach the manifest verbatim, so JSON metacharacters must be escaped.
     #[test]
     fn json_strings_are_escaped() {
         assert_eq!(json_string("water"), "\"water\"");
         assert_eq!(json_string("a\"b\\c\n"), "\"a\\\"b\\\\c\\u000a\"");
     }
 
-    // End to end: two materials of different resolutions become a 2:1 row, resized to the larger, with matching manifest.
     #[test]
     fn combines_two_materials_into_a_row() {
         let root = scratch("end-to-end");

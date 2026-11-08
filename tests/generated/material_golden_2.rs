@@ -10,16 +10,16 @@ pub fn material_golden_2() -> impl Scene {
         template(|ctx| {
             let linear = |settings: &mut ImageLoaderSettings| settings.is_srgb = false;
             let assets = ctx.resource::<AssetServer>();
-            let base_color: Handle<Image> = assets.load("golden_2/base_color.png");
-            let normal: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/normal.png");
-            let orm: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/orm.png");
-            let emissive: Handle<Image> = assets.load("golden_2/emissive.png");
-            let transmission: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/transmission.png");
-            let specular: Handle<Image> = assets.load("golden_2/specular.png");
-            let clearcoat: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/clearcoat.png");
-            let clearcoat_normal: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/clearcoat_normal.png");
-            let anisotropy: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/anisotropy.png");
-            let depth: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/depth.png");
+            let base_color: Handle<Image> = assets.load("golden_2/base_color.ktx2");
+            let normal: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/normal.ktx2");
+            let orm: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/orm.ktx2");
+            let emissive: Handle<Image> = assets.load("golden_2/emissive.ktx2");
+            let transmission: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/transmission.ktx2");
+            let specular: Handle<Image> = assets.load("golden_2/specular.ktx2");
+            let clearcoat: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/clearcoat.ktx2");
+            let clearcoat_normal: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/clearcoat_normal.ktx2");
+            let anisotropy: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/anisotropy.ktx2");
+            let depth: Handle<Image> = assets.load_builder().with_settings(linear).load("golden_2/depth.ktx2");
             let material = StandardMaterial {
                 base_color_texture: Some(base_color.clone()),
                 normal_map_texture: Some(normal.clone()),

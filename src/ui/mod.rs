@@ -27,6 +27,7 @@ use crate::app::{EditorSettings, PreviewShape, SunAngles, RESOLUTIONS};
 use crate::gpu::export::ExportJob;
 use crate::gpu::maps::{MapKind, MAP_COUNT};
 use crate::gpu::{Generation, PreviewMaps, ShaderLibrary};
+use crate::map_file::MapFormat;
 use crate::material::catalog::MaterialCatalog;
 use crate::status::{CompileState, SharedStatus};
 use map_view::{Channel, MapViewMaterial};
@@ -64,6 +65,10 @@ pub struct PreviewResButton(pub u32);
 /// Activating it sets the export resolution to the wrapped value.
 #[derive(Component, Debug)]
 pub struct ExportResButton(pub u32);
+
+/// Activating it sets the format exports and copied code use to the wrapped value.
+#[derive(Component, Debug)]
+pub struct ExportFormatButton(pub MapFormat);
 
 /// Activating it requests an export of the current maps.
 #[derive(Component, Debug)]
@@ -328,7 +333,10 @@ fn spawn_ui(
                 ExportResButton(resolution),
             ));
         }
-        bar.spawn(small_button("Export PNGs", ExportButton));
+        for format in [MapFormat::Ktx2, MapFormat::Png] {
+            bar.spawn(small_button(format.extension(), ExportFormatButton(format)));
+        }
+        bar.spawn(small_button("Export", ExportButton));
         bar.spawn(small_button("Copy code", CopyCodeButton));
         bar.spawn(small_button("animate", AnimateButton));
         bar.spawn(small_button("turntable", TurntableButton));
@@ -646,6 +654,7 @@ fn on_setting(
     mut commands: Commands,
     preview_res: Query<&PreviewResButton>,
     export_res: Query<&ExportResButton>,
+    export_formats: Query<&ExportFormatButton>,
     exports: Query<&ExportButton>,
     animates: Query<&AnimateButton>,
     turntables: Query<&TurntableButton>,
@@ -667,6 +676,9 @@ fn on_setting(
     if let Ok(button) = export_res.get(entity) {
         settings.export_resolution = button.0;
     }
+    if let Ok(button) = export_formats.get(entity) {
+        settings.export_format = button.0;
+    }
     if exports.get(entity).is_ok() {
         job.request();
     }
@@ -682,6 +694,7 @@ fn on_copy_code(
     event: On<Activate>,
     buttons: Query<&CopyCodeButton>,
     catalog: Res<MaterialCatalog>,
+    settings: Res<EditorSettings>,
     mut clipboard: ResMut<Clipboard>,
 ) {
     if buttons.get(event.event().entity).is_err() {
@@ -690,7 +703,10 @@ fn on_copy_code(
     let Some(active) = catalog.active() else {
         return;
     };
-    match clipboard.set_text(crate::codegen::material_code(&active.name)) {
+    match clipboard.set_text(crate::codegen::material_code(
+        &active.name,
+        settings.export_format,
+    )) {
         Ok(()) => info!("copied the code for {} to the clipboard", active.name),
         Err(error) => warn!(
             "the clipboard refused the code for {}: {error:?}",
