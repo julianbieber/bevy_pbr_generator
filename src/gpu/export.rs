@@ -1,4 +1,4 @@
-//! Reading a generated map set back off the GPU and writing it out as PNGs.
+//! Reading a generated map set back off the GPU and writing it out as files.
 
 use std::path::PathBuf;
 
@@ -8,6 +8,7 @@ use bevy::tasks::AsyncComputeTaskPool;
 
 use crate::gpu::maps::{allocate_maps, MapKind, MAP_COUNT};
 use crate::gpu::{ExportRequest, GenerateRequest};
+use crate::map_file::{encode_ktx2, full_chain_levels, MapFormat};
 
 /// How far along an export is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -30,6 +31,7 @@ pub struct ExportJob {
     pub resolution: u32,
     pub output_dir: String,
     pub material: String,
+    pub format: MapFormat,
     pub remaining: usize,
 }
 
@@ -51,8 +53,6 @@ impl ExportJob {
 #[derive(Component, Debug)]
 pub struct ExportMap(pub MapKind);
 
-/// Frames to wait between requesting the export dispatch and reading the maps
-/// back, so the readback copies a generated texture rather than a blank one.
 const DISPATCH_FRAMES: u32 = 2;
 
 pub fn drive_export(
@@ -88,6 +88,7 @@ pub fn drive_export(
             job.resolution = resolution;
             job.output_dir = settings.output_dir.clone();
             job.material = active.name.clone();
+            job.format = settings.export_format;
             job.remaining = MAP_COUNT;
             job.stage = ExportStage::Dispatching(DISPATCH_FRAMES);
         }
@@ -124,12 +125,13 @@ fn receive_map(
 
     let resolution = job.resolution;
     let directory = PathBuf::from(&job.output_dir).join(slug(&job.material));
-    let path = directory.join(format!("{}.png", kind.file_stem()));
+    let format = job.format;
+    let path = directory.join(format!("{}.{}", kind.file_stem(), format.extension()));
     let data = event.event().data.clone();
 
     AsyncComputeTaskPool::get()
         .spawn(async move {
-            if let Err(error) = write_map(&path, resolution, kind, &data) {
+            if let Err(error) = write_map(&path, resolution, kind, format, &data) {
                 error!("export of {} failed: {error}", path.display());
             } else {
                 info!("wrote {}", path.display());
@@ -159,18 +161,41 @@ pub fn slug(name: &str) -> String {
         .collect()
 }
 
-/// Converts one `rgba16float` readback to 8-bit RGBA and writes it as a PNG.
+/// Writes one `rgba16float` readback to `path` in `format`, creating the parent
+/// directory: as a single level in a PNG, or in KTX2 with a chain down to 1x1,
+/// which needs a power-of-two `resolution`.
 ///
 /// The sRGB transfer function is applied here and only here, to the RGB of the
 /// three colour maps; alpha and every data map stay linear. That is what makes
-/// the exported PNG agree with the preview, which samples the same linear
+/// the exported file agree with the preview, which samples the same linear
 /// texture.
-fn write_map(
+pub fn write_map(
     path: &std::path::Path,
     resolution: u32,
     kind: MapKind,
+    format: MapFormat,
     data: &[u8],
 ) -> Result<(), String> {
+    let rgba = to_rgba8(resolution, kind, data)?;
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    match format {
+        MapFormat::Png => image::RgbaImage::from_raw(resolution, resolution, rgba)
+            .ok_or_else(|| "readback did not fill the image".to_string())?
+            .save(path)
+            .map_err(|e| e.to_string()),
+        MapFormat::Ktx2 => {
+            let levels = full_chain_levels(resolution);
+            let bytes = encode_ktx2(kind, resolution, resolution, rgba, levels)?;
+            std::fs::write(path, bytes).map_err(|e| e.to_string())
+        }
+    }
+}
+
+fn to_rgba8(resolution: u32, kind: MapKind, data: &[u8]) -> Result<Vec<u8>, String> {
     let pixels = (resolution as usize) * (resolution as usize);
     if data.len() < pixels * 8 {
         return Err(format!(
@@ -194,23 +219,13 @@ fn write_map(
             out.push((value.clamp(0.0, 1.0) * 255.0).round() as u8);
         }
     }
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-
-    image::RgbaImage::from_raw(resolution, resolution, out)
-        .ok_or_else(|| "readback did not fill the image".to_string())?
-        .save(path)
-        .map_err(|e| e.to_string())
+    Ok(out)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // The material name becomes a directory, so anything a user might type in a
-    // `@material` header has to survive the trip to the filesystem.
     #[test]
     fn slugs_are_filesystem_safe() {
         assert_eq!(slug("Water"), "water");

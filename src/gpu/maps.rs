@@ -62,7 +62,7 @@ impl MapKind {
         }
     }
 
-    /// Stem of the PNG this map exports to.
+    /// Stem of the file this map exports to.
     pub fn file_stem(self) -> &'static str {
         match self {
             Self::BaseColor => "base_color",
@@ -79,7 +79,7 @@ impl MapKind {
     }
 
     /// Whether the RGB channels carry a colour that must have the sRGB transfer
-    /// function applied when written to a PNG. Alpha is always linear, and maps
+    /// function applied when written to a file. Alpha is always linear, and maps
     /// that carry no colour at all are linear throughout.
     pub fn rgb_is_srgb(self) -> bool {
         matches!(self, Self::BaseColor | Self::Emissive | Self::Specular)
@@ -118,8 +118,6 @@ pub fn allocate_maps(images: &mut Assets<Image>, resolution: u32) -> Vec<Handle<
 mod tests {
     use super::*;
 
-    // Group 0 binds the maps by position, so the order of `ALL` is part of the
-    // shader contract in `pbr_maps.wesl` and must not drift.
     #[test]
     fn map_order_matches_the_binding_order() {
         assert_eq!(MapKind::ALL.len(), MAP_COUNT);
@@ -127,8 +125,6 @@ mod tests {
         assert_eq!(MapKind::ALL[MAP_COUNT - 1], MapKind::Depth);
     }
 
-    // Exactly the three maps whose RGB is a colour get the sRGB transfer
-    // function at export; applying it to a data map would corrupt it.
     #[test]
     fn only_colour_maps_are_srgb() {
         let srgb: Vec<&str> = MapKind::ALL

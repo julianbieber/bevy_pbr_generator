@@ -6,6 +6,7 @@ license = "MIT"
 default-run = "bevy_pbr_generator"
 
 [dependencies]
+bcdec_rs = "0.2"
 bevy = { version = "0.20", features = [
     "bevy_feathers",
     "file_watcher",
@@ -17,8 +18,10 @@ bevy = { version = "0.20", features = [
     "pbr_multi_layer_material_textures",
     "system_clipboard",
 ] }
+ctt = { version = "0.5", default-features = false, features = ["encoder-bc7enc", "encoder-intel", "ispc-prebuilt", "rayon"] }
 half = "2"
 image = { version = "0.24", default-features = false, features = ["png"] }
+ktx2 = "0.5"
 wesl = "0.6"
 
 [dev-dependencies]

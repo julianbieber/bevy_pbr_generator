@@ -90,6 +90,7 @@ impl SunAngles {
 pub struct EditorSettings {
     pub preview_resolution: u32,
     pub export_resolution: u32,
+    pub export_format: crate::map_file::MapFormat,
     pub output_dir: String,
     pub animate: bool,
     pub turntable: bool,
@@ -101,6 +102,7 @@ impl Default for EditorSettings {
         Self {
             preview_resolution: 512,
             export_resolution: 2048,
+            export_format: crate::map_file::MapFormat::default(),
             output_dir: "./output".to_string(),
             animate: false,
             turntable: false,
@@ -168,8 +170,6 @@ fn load_catalog(
     });
 }
 
-/// Re-parses a material whose shader asset changed, and bumps the generation so
-/// the edit is visible without any further input.
 fn reload_changed_materials(
     mut events: MessageReader<AssetEvent<bevy::shader::Shader>>,
     mut catalog: ResMut<MaterialCatalog>,
@@ -198,8 +198,6 @@ fn advance_animation(settings: Res<EditorSettings>, mut generation: ResMut<Gener
     }
 }
 
-/// Assembles what the render world needs. Deliberately does not bump the
-/// generation: only a change that alters the output does that.
 fn build_request(
     catalog: Res<MaterialCatalog>,
     maps: Res<PreviewMaps>,

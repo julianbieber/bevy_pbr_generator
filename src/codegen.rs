@@ -5,6 +5,7 @@ use std::fmt::Write;
 
 use crate::gpu::export::slug;
 use crate::gpu::maps::MapKind;
+use crate::map_file::MapFormat;
 
 /// Each `StandardMaterial` texture slot the preview binds, and the map that
 /// feeds it.
@@ -50,12 +51,14 @@ pub fn function_name(material: &str) -> String {
 /// The source of one Rust module body for a bevy project: the `use` lines and a
 /// function returning a `bsn!` scene that gives its entity a `MeshMaterial3d`.
 ///
-/// The text depends on `material` alone. It loads the maps from
-/// `<slug>/<stem>.png`, so the exported material folder has to sit directly
-/// under the project's `assets/`, and it binds every map, so the project needs
-/// the bevy features `pbr_transmission_textures`, `pbr_specular_textures`,
-/// `pbr_anisotropy_texture` and `pbr_multi_layer_material_textures`.
-pub fn material_code(material: &str) -> String {
+/// The text depends on `material` and `format` alone. It loads the maps from
+/// `<slug>/<stem>.<extension>`, so the material folder exported in `format` has
+/// to sit directly under the project's `assets/`, and it binds every map, so the
+/// project needs the bevy features `pbr_transmission_textures`,
+/// `pbr_specular_textures`, `pbr_anisotropy_texture` and
+/// `pbr_multi_layer_material_textures`. KTX2 also needs `ktx2` and a zstd feature
+/// of bevy's, which its default features include, and a GPU with BC textures.
+pub fn material_code(material: &str, format: MapFormat) -> String {
     let folder = slug(material);
     let mut code = String::new();
 
@@ -92,7 +95,7 @@ pub fn material_code(material: &str) -> String {
     );
     for kind in MapKind::ALL {
         let stem = kind.file_stem();
-        let path = format!("{folder}/{stem}.png");
+        let path = format!("{folder}/{stem}.{}", format.extension());
         if kind.rgb_is_srgb() {
             let _ = writeln!(
                 code,
@@ -133,8 +136,6 @@ pub fn material_code(material: &str) -> String {
 mod tests {
     use super::*;
 
-    // A material name may start with a digit, be empty, or spell a keyword; the
-    // pasted function has to compile for every one of them.
     #[test]
     fn function_names_are_identifiers() {
         for name in ["", "2x", "!", "Self", "fn", "Rocky Ground"] {
@@ -147,11 +148,9 @@ mod tests {
         }
     }
 
-    // Export encodes only the colour maps as sRGB, so the pasted code has to load
-    // exactly the others as linear or they render wrong.
     #[test]
     fn only_colour_maps_load_as_srgb() {
-        let code = material_code("Rocky Ground");
+        let code = material_code("Rocky Ground", MapFormat::Ktx2);
         for kind in MapKind::ALL {
             let line = code
                 .lines()
@@ -165,8 +164,6 @@ mod tests {
         }
     }
 
-    // Every map export writes must be bound somewhere, or the pasted material
-    // silently drops one.
     #[test]
     fn every_map_feeds_a_slot() {
         for kind in MapKind::ALL {
